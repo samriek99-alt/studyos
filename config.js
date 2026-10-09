@@ -1,4 +1,4 @@
 window.STUDYOS_CONFIG = {
-  url: "YOUR_SUPABASE_PROJECT_URL",
-  publishableKey: "YOUR_SUPABASE_PUBLISHABLE_KEY"
+  url: "https://fqeksrelifevntyoeflt.supabase.co",
+  publishableKey: "sb_publishable_CvidDszozE4pDazPyxBJBA_QwChILFa"
 };
