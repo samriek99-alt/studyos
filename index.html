@@ -51,6 +51,37 @@ body{background:var(--theme-bg)}.wrap{max-width:1500px;padding:22px 26px 28px 26
 @media(max-width:550px){.workspace-hero h2{font-size:1.45rem}.workspace-entry{flex-wrap:wrap}.workspace-entry .grow{min-width:150px}.stack-form{grid-template-columns:1fr}}
 </style><style>
 .task-planner-layout{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr);gap:16px;align-items:start}.task-backlog,.task-week-panel{min-width:0}.task-week-scroll{overflow-x:auto}.task-week-grid{display:grid;grid-template-columns:repeat(7,minmax(135px,1fr));gap:7px;min-width:960px}.plan-day{background:var(--theme-alt,#f4f6fb);border:1px solid var(--theme-line,#e3e8f4);border-radius:12px;min-height:285px;padding:9px}.plan-today{outline:2px solid var(--theme-primary,#535bd6)}.plan-day-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.plan-day-head span{font-size:.8rem;color:var(--theme-muted,#69758e)}.plan-event{border-radius:8px;background:var(--theme-soft,#e8edfa);padding:7px;margin-bottom:6px;font-size:.77rem;overflow-wrap:anywhere;border-left:3px solid var(--theme-primary,#535bd6)}.plan-event.work{border-color:#df9b45}.plan-event.exam{border-color:#e07789}.plan-event.personal,.plan-event.social{border-color:#54b780}.plan-event small{display:block;opacity:.75;margin-top:3px}.plan-task,.backlog-task{background:var(--theme-surface,#fff);border:1px solid var(--theme-line,#e3e8f4);border-left:3px solid var(--subject-color,#8491a6);border-radius:10px;padding:9px;margin-bottom:8px;overflow-wrap:anywhere}.backlog-task{cursor:grab}.backlog-task strong,.plan-task-title{font-size:.84rem}.backlog-task .muted{font-size:.75rem;margin-top:4px}.plan-task-actions{display:flex;flex-wrap:wrap;gap:4px;margin-top:9px}.plan-task-actions button{padding:5px 7px;font-size:.7rem;border-radius:7px}.plan-empty{font-size:.74rem;color:var(--theme-muted,#69758e);border:1px dashed var(--theme-line,#e3e8f4);border-radius:9px;padding:12px 7px;text-align:center}.plan-over{outline:2px dashed var(--theme-primary,#535bd6)}@media(max-width:950px){.task-planner-layout{grid-template-columns:1fr}.task-week-grid{min-width:900px}}#taskSchedulePanel{scroll-margin-top:24px}
+
+/* Responsive layout fix: iPad landscape/portrait, tablets and phones */
+html,body{max-width:100%;overflow-x:clip}
+.wrap,#privateApp,#app{min-width:0}
+#app>.panel,#app>.grid,#app>.workspace-grid{min-width:0}
+@media (max-width:1280px){
+  header{padding:16px 22px!important}
+  .wrap{max-width:100%;padding:16px 22px 32px!important;margin:0 auto}
+  #nav{position:relative!important;inset:auto!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;width:100%!important;max-width:100%;height:auto!important;display:flex!important;flex-direction:row!important;align-items:center!important;gap:5px!important;overflow-x:auto!important;overflow-y:hidden!important;white-space:nowrap;z-index:1;margin:0 0 18px;padding:8px!important;border-radius:15px;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+  #nav button{flex:0 0 auto!important;text-align:center!important;white-space:nowrap;padding:10px 13px!important}
+  #nav button.active{box-shadow:inset 0 -3px var(--theme-primary)!important}
+  .workspace-grid,.dash-layout{grid-template-columns:minmax(0,1fr)!important}
+  .task-planner-layout{grid-template-columns:minmax(0,1fr)!important}
+  .calendar-layout{grid-template-columns:minmax(0,1fr)!important}
+  .task-week-scroll,.week-scroll,.calendar-shell{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+}
+@media (max-width:700px){
+  header{padding:14px 12px!important;gap:12px!important}
+  .wrap{padding:12px 12px 26px!important}
+  .panel{padding:14px!important}
+  #nav{margin-bottom:13px;padding:6px!important}
+  #nav button{font-size:.8rem!important;padding:9px 11px!important}
+  .dash-metrics,.dash-aside,.dash-quick{grid-template-columns:minmax(0,1fr)!important}
+  .workspace-grid,.stack-form,.quick-add{grid-template-columns:minmax(0,1fr)!important}
+  .workspace-entry{flex-wrap:wrap}
+  .workspace-entry .grow{min-width:0;width:100%}
+  .theme-controls{max-width:100%;flex-wrap:wrap}
+  .theme-controls label{min-width:0}
+  .task-week-grid{min-width:900px}
+  .month-day{min-width:0}
+}
 </style></head><body><header><h1>StudyOS</h1><p>School + UCAT planning hub</p></header><main class="wrap"><div class="notice" id="status">Connecting to Supabase…</div><div class="panel" id="authPanel" style="max-width:470px;margin:22px auto"><h2>Welcome to StudyOS</h2><p class="muted">Sign in with your email and password on any device.</p><form id="loginForm"><label>Email<input id="email" type="email" required autocomplete="email"></label><label>Password<input id="password" type="password" minlength="6" required autocomplete="current-password"></label><button type="submit" id="loginSubmit">Sign in</button></form><div class="row" style="justify-content:flex-start;margin-top:12px"><button class="secondary" type="button" id="signUpButton">Create account</button><button class="secondary" type="button" id="resetPasswordButton">Forgot password?</button></div><p class="muted" style="font-size:.85rem">Already used a magic link? Sign in once with your existing email link to set a password without losing your data.</p><button type="button" class="secondary" id="magicLinkButton">Use existing email sign-in link</button><p id="authMessage" class="muted" role="status" aria-live="polite"></p></div><div class="panel hide" id="accountPanel"><div class="row"><span id="accountEmail"></span><button class="secondary" id="setPassword">Set / change password</button><button class="secondary" id="signOut">Sign out</button></div><p class="muted">Changes sync to Supabase. Avoid editing simultaneously on two devices.</p><button class="secondary" id="importLocal">Import older browser-only records (if any)</button></div><div id="privateApp" class="hide"><nav id="nav"></nav><div id="app"></div></div></main><footer>StudyOS · Cloud sync v2</footer><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script><script src="config.js"></script><script>
 const sections=['Dashboard','UCAT Practice','Error Patterns','Homework','Activity History','Tasks','Calendar'];const subjects=['Specialist Maths','Methods','Chemistry','Physics','Economics'];const types={VR:['General VR','True / False / Can’t Tell','Other VR'],DM:['General DM','Syllogisms','Logic Puzzles','Interpreting Information','Probability','Venn Diagrams','Arguments'],QR:['General QR']};
 const storeKey='studyos-preview-v1';const empty=()=>({sessions:[],errors:[],homework:[],tasks:[],events:[],studyLogs:[],milestones:[],topics:[],dailyPlans:[],weeklyReviews:[]});let data=empty();let page='Dashboard';const $=id=>document.getElementById(id);
