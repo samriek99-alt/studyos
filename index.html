@@ -195,8 +195,8 @@ bind=function(){originalBind();
   document.querySelectorAll('[data-week-day]').forEach(el=>el.addEventListener('click',e=>{if(e.target.closest('[data-edit-event]'))return;showEvent(null);f.elements.date.value=el.dataset.weekDay;const rect=el.getBoundingClientRect();let min=Math.max(0,Math.min(15*60,Math.floor((e.clientY-rect.top)/30)*30));let h=6+Math.floor(min/60),m=min%60;f.elements.time.value=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');f.elements.endTime.value=String(Math.min(h+1,23)).padStart(2,'0')+':'+String(m).padStart(2,'0');f.elements.title.focus()}));
   document.querySelectorAll('[data-edit-event]').forEach(el=>el.onclick=e=>{e.stopPropagation();showEvent(data.events.find(x=>x.id===el.dataset.editEvent))});
   $('resetEventBtn').onclick=()=>showEvent(null);
-  $('deleteEventBtn').onclick=()=>{if(!eventEditId||!confirm('Delete this event?'))return;data.events=data.events.filter(x=>x.id!==eventEditId);eventEditId=null;save();render()};
-  f.onsubmit=e=>{e.preventDefault();const o=Object.fromEntries(new FormData(f).entries());o.allDay=f.elements.allDay.checked;if(o.allDay){o.time='';o.endTime=''}else if(o.endTime&&o.endTime<=o.time){alert('End time must be after start time.');return}if(eventEditId){const idx=data.events.findIndex(x=>x.id===eventEditId);if(idx>=0)data.events[idx]={...data.events[idx],...o}}else{data.events.push({...o,id:uid()})}eventEditId=null;save();render()};
+  $('deleteEventBtn').onclick=()=>{if(eventEditId&&data.events.find(x=>x.id===eventEditId)?.googleImported){alert('This event comes from Google Calendar. Edit or delete it in Google Calendar, then sync again.');return;}if(!eventEditId||!confirm('Delete this event?'))return;data.events=data.events.filter(x=>x.id!==eventEditId);eventEditId=null;save();render()};
+  f.onsubmit=e=>{e.preventDefault();if(eventEditId&&data.events.find(x=>x.id===eventEditId)?.googleImported){alert('Edit imported events in Google Calendar, then sync again.');return;}const o=Object.fromEntries(new FormData(f).entries());o.allDay=f.elements.allDay.checked;if(o.allDay){o.time='';o.endTime=''}else if(o.endTime&&o.endTime<=o.time){alert('End time must be after start time.');return}if(eventEditId){const idx=data.events.findIndex(x=>x.id===eventEditId);if(idx>=0)data.events[idx]={...data.events[idx],...o}}else{data.events.push({...o,id:uid()})}eventEditId=null;save();render()};
   toggleTimes();
  }
 };
@@ -417,8 +417,8 @@ function googleCalendarPanel() {
       <span class="tag" id="googleCalendarStatus">Checking…</span></div>
     <p id="googleCalendarDetails" class="muted">Checking your connection securely…</p>
     <div class="toolbar"><button type="button" id="googleCalendarConnect" disabled>Connect Google Calendar</button>
-    <button type="button" class="secondary" id="googleCalendarRefresh">Refresh connection status</button></div>
-    <p class="muted" style="margin:12px 0 0;font-size:.8rem">Connecting authorises Google Calendar access. Two-way event syncing is not enabled yet; your existing events will not be changed.</p>
+    <button type="button" class="secondary" id="googleCalendarRefresh">Refresh connection status</button><button type="button" id="googleCalendarSyncNow">Sync now</button></div><p id="googleCalendarSyncMessage" class="muted" role="status" aria-live="polite"></p>
+    <p class="muted" style="margin:12px 0 0;font-size:.8rem">Sync manually to import Google events and export StudyOS events. Google-only events are read-only in StudyOS. Deleting imported events in StudyOS will not delete them in Google.</p>
   </section>`;
 }
 function updateGoogleCalendarPanel(){
@@ -426,7 +426,7 @@ function updateGoogleCalendarPanel(){
   if(!status||!details||!button)return;
   status.textContent=googleConnectionStatus==='connected'?'Connected':googleConnectionStatus==='loading'?'Checking…':googleConnectionStatus==='error'?'Unable to check':'Not connected';
   details.textContent=googleConnectionStatus==='connected'
-    ?`Connected calendar: ${googleConnectionEmail||'Google Calendar'}. Two-way syncing has not been enabled yet.`
+    ?`Connected calendar: ${googleConnectionEmail||'Google Calendar'}. Use Sync now to exchange events.`
     :googleConnectionStatus==='error'?(googleConnectionError||'Unable to check your connection.')
     :googleConnectionStatus==='loading'?'Checking your saved connection…':'Connect a Google account to prepare for syncing.';
   button.textContent=googleConnectBusy?'Opening Google…':googleConnectionStatus==='connected'?'Reconnect Google Calendar':'Connect Google Calendar';
@@ -477,7 +477,92 @@ bind=function(){
   else app.prepend(panel.firstElementChild);
   $('googleCalendarConnect').addEventListener('click',startGoogleCalendarConnection);
   $('googleCalendarRefresh').addEventListener('click',refreshGoogleCalendarStatus);
+  $('googleCalendarSyncNow').addEventListener('click',syncGoogleCalendarNow);
   if(googleConnectionStatus==='unknown')void refreshGoogleCalendarStatus();else updateGoogleCalendarPanel();
 };
+
+
+/* Manual two-way sync. Google-only events are imported as read-only copies.
+   StudyOS-owned events are tracked by their Google event IDs and last-synced snapshot. */
+let googleSyncBusy=false;
+function calendarSnapshot(e){return JSON.stringify({title:e.title||'',date:e.date||'',time:e.allDay?'':e.time||'',allDay:!!(e.allDay||!e.time)});}
+async function calendarSyncRequest(payload){
+  const {data:sessionResult,error}=await client.auth.getSession();
+  if(error||!sessionResult.session?.access_token)throw new Error('Sign in again before syncing.');
+  const {data,response,error:invokeError}=await client.functions.invoke('google-calendar-sync',{body:payload});
+  if(invokeError){let detail='';try{const body=await invokeError.context?.json?.();detail=body?.error||''}catch{}throw new Error(detail||invokeError.message||'Calendar sync request failed');}
+  if(data?.error)throw new Error(data.error);
+  return data;
+}
+function fromGoogleEvent(e){
+  const start=e?.start?.dateTime||'';
+  const date=e?.start?.date||start.slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date||'')||!e?.id)return null;
+  const allDay=!!e.start?.date;
+  let time='';
+  if(!allDay&&start){
+    try{time=new Intl.DateTimeFormat('en-GB',{timeZone:'Australia/Brisbane',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(start))}catch{}
+  }
+  return {title:e.summary||'(Untitled event)',date,time,endTime:'',allDay,kind:'Other',googleEventId:e.id,googleImported:e.extendedProperties?.private?.studyos!=='true'};
+}
+async function syncGoogleCalendarNow(){
+  if(googleSyncBusy||!user||!loaded)return;
+  if(googleConnectionStatus!=='connected'){alert('Connect Google Calendar first.');return;}
+  googleSyncBusy=true;
+  const btn=$('googleCalendarSyncNow'),note=$('googleCalendarSyncMessage');
+  if(btn)btn.disabled=true;
+  const report=t=>{if(note)note.textContent=t;};
+  let imported=0,created=0,updated=0,conflicts=0;
+  try{
+    report('Reading Google Calendar…');
+    const result=await calendarSyncRequest({action:'list'});
+    const remote=Array.isArray(result.events)?result.events:[];
+    const remoteIds=new Set(remote.map(x=>x.id));
+    const existingIds=new Set(data.events.map(x=>x.googleEventId).filter(Boolean));
+    // Pull Google changes before pushing. Locally modified events take priority in a conflict.
+    for(const g of remote){
+      const parsed=fromGoogleEvent(g);if(!parsed)continue;
+      const local=data.events.find(x=>x.googleEventId===g.id);
+      if(local){
+        if(local.googleImported){Object.assign(local,{...parsed,id:local.id,googleImported:true});continue;}
+        if(local.googleLastSynced&&calendarSnapshot(local)===local.googleLastSynced){
+          Object.assign(local,{...parsed,id:local.id,kind:local.kind,googleImported:false});
+          local.googleLastSynced=calendarSnapshot(local);
+        }else if(local.googleLastSynced&&calendarSnapshot(local)!==local.googleLastSynced){conflicts++;}
+      }else{
+        data.events.push({...parsed,id:uid(),googleLastSynced:calendarSnapshot(parsed)});
+        existingIds.add(g.id);imported++;
+      }
+    }
+    // Don't recreate a previously synced event that is now missing in Google.
+    for(const local of data.events){
+      if(local.googleImported)continue;
+      if(local.googleEventId&&!remoteIds.has(local.googleEventId))continue;
+      if(!local.googleEventId){
+        report('Sending StudyOS events to Google…');
+        const response=await calendarSyncRequest({action:'create',event:local});
+        if(!response?.event?.id)throw new Error('Google did not return an event ID');
+        local.googleEventId=response.event.id;
+        local.googleLastSynced=calendarSnapshot(local);
+        created++;
+      }else if(local.googleLastSynced&&calendarSnapshot(local)!==local.googleLastSynced){
+        report('Updating Google events…');
+        await calendarSyncRequest({action:'update',googleEventId:local.googleEventId,event:local});
+        local.googleLastSynced=calendarSnapshot(local);
+        updated++;
+      }
+    }
+    save();render();
+    const fresh=$('googleCalendarSyncMessage');
+    if(fresh)fresh.textContent=`Sync complete: ${imported} imported, ${created} created in Google, ${updated} updated.${conflicts?' '+conflicts+' local changes kept.':''}`;
+  }catch(err){
+    report('Sync stopped: '+(err?.message||String(err))+'. No local events were deleted.');
+    // Preserve Google event IDs for any successful partial uploads so retries don't duplicate them.
+    save();
+  }finally{
+    googleSyncBusy=false;
+    const current=$('googleCalendarSyncNow');if(current)current.disabled=false;
+  }
+}
 
 </script></body></html>
