@@ -402,4 +402,82 @@ const finish=$('focusFinish');if(finish)finish.onclick=()=>{const current=focusC
 
 function openFocusRoom(){if(!$('studyOverlay')){const el=document.createElement('div');el.id='studyOverlay';el.className='study-overlay';document.body.append(el)}drawFocusRoom()}
 setInterval(()=>{if(focus.running){focusTick();saveFocus()}},1000);
+
+
+/* Google Calendar account connection — sync controls will be added separately. */
+const googleCalendarFunctionBase = 'google-calendar-connect';
+let googleConnectionStatus = 'unknown';
+let googleConnectionEmail = '';
+let googleConnectionError = '';
+let googleConnectBusy = false;
+
+function googleCalendarPanel() {
+  return `<section class="panel" id="googleCalendarPanel" aria-label="Google Calendar connection">
+    <div class="section-head"><div><h2>Google Calendar</h2><p class="muted">Connect your Google account to prepare for calendar syncing.</p></div>
+      <span class="tag" id="googleCalendarStatus">Checking…</span></div>
+    <p id="googleCalendarDetails" class="muted">Checking your connection securely…</p>
+    <div class="toolbar"><button type="button" id="googleCalendarConnect" disabled>Connect Google Calendar</button>
+    <button type="button" class="secondary" id="googleCalendarRefresh">Refresh connection status</button></div>
+    <p class="muted" style="margin:12px 0 0;font-size:.8rem">Connecting authorises Google Calendar access. Two-way event syncing is not enabled yet; your existing events will not be changed.</p>
+  </section>`;
+}
+function updateGoogleCalendarPanel(){
+  const status=$('googleCalendarStatus'),details=$('googleCalendarDetails'),button=$('googleCalendarConnect');
+  if(!status||!details||!button)return;
+  status.textContent=googleConnectionStatus==='connected'?'Connected':googleConnectionStatus==='loading'?'Checking…':googleConnectionStatus==='error'?'Unable to check':'Not connected';
+  details.textContent=googleConnectionStatus==='connected'
+    ?`Connected calendar: ${googleConnectionEmail||'Google Calendar'}. Two-way syncing has not been enabled yet.`
+    :googleConnectionStatus==='error'?(googleConnectionError||'Unable to check your connection.')
+    :googleConnectionStatus==='loading'?'Checking your saved connection…':'Connect a Google account to prepare for syncing.';
+  button.textContent=googleConnectBusy?'Opening Google…':googleConnectionStatus==='connected'?'Reconnect Google Calendar':'Connect Google Calendar';
+  button.disabled=googleConnectBusy||googleConnectionStatus==='loading';
+}
+async function refreshGoogleCalendarStatus(){
+  if(!client||!user)return;
+  const owner=user.id;
+  googleConnectionStatus='loading';googleConnectionError='';updateGoogleCalendarPanel();
+  try{
+    const {data:connection,error}=await client.from('google_calendar_connections').select('google_email').eq('user_id',owner).maybeSingle();
+    if(error)throw error;
+    if(user?.id!==owner)return;
+    googleConnectionStatus=connection?'connected':'disconnected';
+    googleConnectionEmail=connection?.google_email||'';
+  }catch(err){googleConnectionStatus='error';googleConnectionError=err?.message||'Connection check failed.'}
+  updateGoogleCalendarPanel();
+}
+async function startGoogleCalendarConnection(){
+  if(!client||!user){alert('Please sign in to StudyOS first.');return;}
+  googleConnectBusy=true;googleConnectionError='';updateGoogleCalendarPanel();
+  try{
+    const {data:sessionResult,error:sessionError}=await client.auth.getSession();
+    if(sessionError||!sessionResult.session?.access_token)throw new Error('Please sign in again.');
+    const response=await fetch(`${window.STUDYOS_CONFIG.url.replace(/\/$/,'')}/functions/v1/${googleCalendarFunctionBase}`,{
+      method:'POST',
+      headers:{'Authorization':`Bearer ${sessionResult.session.access_token}`,'apikey':window.STUDYOS_CONFIG.publishableKey,'Content-Type':'application/json'},
+      body:'{}'
+    });
+    let payload={};try{payload=await response.json()}catch{}
+    if(!response.ok||!payload.url)throw new Error(payload.error||`Google connection request failed (${response.status}).`);
+    const target=new URL(payload.url);
+    if(target.protocol!=='https:'||target.hostname!=='accounts.google.com')throw new Error('Unexpected Google authorisation address.');
+    window.location.assign(target.toString());
+  }catch(err){
+    googleConnectionStatus='error';googleConnectionError=err?.message||'Unable to start Google connection.';
+    googleConnectBusy=false;updateGoogleCalendarPanel();
+  }
+}
+const bindBeforeGoogleCalendar=bind;
+bind=function(){
+  bindBeforeGoogleCalendar();
+  if(page!=='Calendar')return;
+  const app=$('app');if(!app)return;
+  const panel=document.createElement('div');panel.innerHTML=googleCalendarPanel();
+  const heading=app.querySelector('.section-head');
+  if(heading)heading.insertAdjacentElement('afterend',panel.firstElementChild);
+  else app.prepend(panel.firstElementChild);
+  $('googleCalendarConnect').addEventListener('click',startGoogleCalendarConnection);
+  $('googleCalendarRefresh').addEventListener('click',refreshGoogleCalendarStatus);
+  if(googleConnectionStatus==='unknown')void refreshGoogleCalendarStatus();else updateGoogleCalendarPanel();
+};
+
 </script></body></html>
