@@ -212,7 +212,20 @@ bind=function(){originalBind();
   document.querySelectorAll('[data-week-day]').forEach(el=>el.addEventListener('click',e=>{if(e.target.closest('[data-edit-event]'))return;showEvent(null);f.elements.date.value=el.dataset.weekDay;const rect=el.getBoundingClientRect();let min=Math.max(0,Math.min(15*60,Math.floor((e.clientY-rect.top)/30)*30));let h=6+Math.floor(min/60),m=min%60;f.elements.time.value=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');f.elements.endTime.value=String(Math.min(h+1,23)).padStart(2,'0')+':'+String(m).padStart(2,'0');f.elements.title.focus()}));
   document.querySelectorAll('[data-edit-event]').forEach(el=>el.onclick=e=>{e.stopPropagation();showEvent(data.events.find(x=>x.id===el.dataset.editEvent))});
   $('resetEventBtn').onclick=()=>showEvent(null);
-  $('deleteEventBtn').onclick=()=>{if(eventEditId&&data.events.find(x=>x.id===eventEditId)?.googleImported){alert('This event comes from Google Calendar. Edit or delete it in Google Calendar, then sync again.');return;}if(!eventEditId||!confirm('Delete this event?'))return;data.events=data.events.filter(x=>x.id!==eventEditId);eventEditId=null;save();render()};
+  $('deleteEventBtn').onclick=async()=>{
+    const entry=data.events.find(x=>x.id===eventEditId);
+    if(entry?.googleImported){alert('This event comes from Google Calendar. Delete it in Google Calendar, then sync again.');return;}
+    if(!entry||!confirm('Delete this event?'))return;
+    const button=$('deleteEventBtn');button.disabled=true;
+    try{
+      if(entry.googleEventId){
+        if(googleConnectionStatus!=='connected')throw new Error('Connect Google Calendar before deleting a synced event.');
+        await calendarSyncRequest({action:'delete',googleEventId:entry.googleEventId});
+      }
+      data.events=data.events.filter(x=>x.id!==entry.id);
+      eventEditId=null;save();render();
+    }catch(error){alert('Deletion was not completed: '+(error?.message||String(error)));button.disabled=false;}
+  };
   f.onsubmit=e=>{e.preventDefault();if(eventEditId&&data.events.find(x=>x.id===eventEditId)?.googleImported){alert('Edit imported events in Google Calendar, then sync again.');return;}const o=Object.fromEntries(new FormData(f).entries());o.allDay=f.elements.allDay.checked;if(o.allDay){o.time='';o.endTime=''}else if(o.endTime&&o.endTime<=o.time){alert('End time must be after start time.');return}if(eventEditId){const idx=data.events.findIndex(x=>x.id===eventEditId);if(idx>=0)data.events[idx]={...data.events[idx],...o}}else{data.events.push({...o,id:uid()})}eventEditId=null;save();render()};
   toggleTimes();
  }
@@ -573,6 +586,25 @@ async function syncGoogleCalendarNow(){
         existingIds.add(`${calId}::${g.id}`);imported++;
       }
     }
+    // Reconcile deletions only after a complete, warning-free Google read.
+    // The backend reads a bounded date range, so never remove records outside it.
+    let removed=0;
+    if (Array.isArray(result.events) && Array.isArray(result.calendars) &&
+        result.calendars.length > 0 && Array.isArray(result.warnings) &&
+        result.warnings.length === 0) {
+      const seen=new Set(remote.filter(g=>g?.id&&g?.studyosCalendarId)
+        .map(g=>`${g.studyosCalendarId}::${g.id}`));
+      const readable=new Set(result.calendars.map(c=>String(c.id)));
+      const minDate=new Date(Date.now()-365*86400000).toISOString().slice(0,10);
+      const maxDate=new Date(Date.now()+729*86400000).toISOString().slice(0,10);
+      data.events=data.events.filter(e=>{
+        if(!e.googleEventId || !e.googleCalendarId || !readable.has(String(e.googleCalendarId)))return true;
+        if(!e.date || e.date<minDate || e.date>maxDate)return true;
+        if(seen.has(`${e.googleCalendarId}::${e.googleEventId}`))return true;
+        removed++;
+        return false;
+      });
+    }
     // Don't recreate a previously synced event that is now missing in Google.
     for(const local of data.events){
       if(local.googleImported)continue;
@@ -594,7 +626,7 @@ async function syncGoogleCalendarNow(){
     }
     save();render();
     const fresh=$('googleCalendarSyncMessage');
-    if(fresh)fresh.textContent=`Sync complete: ${imported} imported, ${created} created in Google, ${updated} updated.${conflicts?' '+conflicts+' local changes kept.':''}${result.warnings?.length?' Some calendars could not be fully read: '+result.warnings.join('; '):''}`;
+    if(fresh)fresh.textContent=`Sync complete: ${imported} imported, ${created} created in Google, ${updated} updated, ${removed} removed locally.${conflicts?' '+conflicts+' local changes kept.':''}${result.warnings?.length?' Some calendars could not be fully read: '+result.warnings.join('; '):''}`;
   }catch(err){
     report('Sync stopped: '+(err?.message||String(err))+'. No local events were deleted.');
     // Preserve Google event IDs for any successful partial uploads so retries don't duplicate them.
