@@ -413,7 +413,7 @@ let googleConnectBusy = false;
 
 function googleCalendarPanel() {
   return `<section class="panel" id="googleCalendarPanel" aria-label="Google Calendar connection">
-    <div class="section-head"><div><h2>Google Calendar</h2><p class="muted">Connect your Google account to prepare for calendar syncing.</p></div>
+    <div class="section-head"><div><h2>Google Calendar</h2><p class="muted">Sync your personal and shared Google calendars. Shared calendars are imported read-only.</p></div>
       <span class="tag" id="googleCalendarStatus">Checking…</span></div>
     <p id="googleCalendarDetails" class="muted">Checking your connection securely…</p>
     <div class="toolbar"><button type="button" id="googleCalendarConnect" disabled>Connect Google Calendar</button>
@@ -515,14 +515,18 @@ async function syncGoogleCalendarNow(){
   let imported=0,created=0,updated=0,conflicts=0;
   try{
     report('Reading Google Calendar…');
-    const result=await calendarSyncRequest({action:'list'});
+    const result=await calendarSyncRequest({action:'listAll'});
     const remote=Array.isArray(result.events)?result.events:[];
-    const remoteIds=new Set(remote.map(x=>x.id));
-    const existingIds=new Set(data.events.map(x=>x.googleEventId).filter(Boolean));
+    const remoteIds=new Set(remote.filter(x=>x.studyosIsPrimary).map(x=>x.id));
+    const existingIds=new Set(data.events.map(x=>`${x.googleCalendarId||'primary'}::${x.googleEventId}`).filter(Boolean));
     // Pull Google changes before pushing. Locally modified events take priority in a conflict.
     for(const g of remote){
       const parsed=fromGoogleEvent(g);if(!parsed)continue;
-      const local=data.events.find(x=>x.googleEventId===g.id);
+      parsed.googleCalendarId=g.studyosCalendarId||'primary';
+      parsed.googleCalendarName=g.studyosCalendarName||'';
+      if(!g.studyosIsPrimary)parsed.googleImported=true;
+      const calId=g.studyosCalendarId||'primary';
+      const local=data.events.find(x=>x.googleEventId===g.id&&(x.googleCalendarId||'primary')===calId);
       if(local){
         if(local.googleImported){Object.assign(local,{...parsed,id:local.id,googleImported:true});continue;}
         if(local.googleLastSynced&&calendarSnapshot(local)===local.googleLastSynced){
@@ -531,7 +535,7 @@ async function syncGoogleCalendarNow(){
         }else if(local.googleLastSynced&&calendarSnapshot(local)!==local.googleLastSynced){conflicts++;}
       }else{
         data.events.push({...parsed,id:uid(),googleLastSynced:calendarSnapshot(parsed)});
-        existingIds.add(g.id);imported++;
+        existingIds.add(`${calId}::${g.id}`);imported++;
       }
     }
     // Don't recreate a previously synced event that is now missing in Google.
@@ -543,6 +547,7 @@ async function syncGoogleCalendarNow(){
         const response=await calendarSyncRequest({action:'create',event:local});
         if(!response?.event?.id)throw new Error('Google did not return an event ID');
         local.googleEventId=response.event.id;
+        local.googleCalendarId='primary';
         local.googleLastSynced=calendarSnapshot(local);
         created++;
       }else if(local.googleLastSynced&&calendarSnapshot(local)!==local.googleLastSynced){
@@ -554,7 +559,7 @@ async function syncGoogleCalendarNow(){
     }
     save();render();
     const fresh=$('googleCalendarSyncMessage');
-    if(fresh)fresh.textContent=`Sync complete: ${imported} imported, ${created} created in Google, ${updated} updated.${conflicts?' '+conflicts+' local changes kept.':''}`;
+    if(fresh)fresh.textContent=`Sync complete: ${imported} imported, ${created} created in Google, ${updated} updated.${conflicts?' '+conflicts+' local changes kept.':''}${result.warnings?.length?' Some calendars could not be fully read: '+result.warnings.join('; '):''}`;
   }catch(err){
     report('Sync stopped: '+(err?.message||String(err))+'. No local events were deleted.');
     // Preserve Google event IDs for any successful partial uploads so retries don't duplicate them.
