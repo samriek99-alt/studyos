@@ -101,6 +101,11 @@ html,body{max-width:100%;overflow-x:clip}
 </style><style>
 .focus-settings{text-align:left;display:grid;gap:14px;margin:18px 0}.focus-settings label{font-weight:600}.focus-slider{padding:14px;border:1px solid var(--theme-line);border-radius:14px;background:var(--theme-alt)}.focus-slider input[type=range]{width:100%;accent-color:#4779c6;cursor:pointer;margin:14px 0 5px}.focus-break-settings{display:grid;grid-template-columns:1fr 1fr;gap:12px}.focus-break-settings input{width:100%}.focus-timeline{display:flex;gap:3px;min-height:54px;width:100%;margin:14px 0 8px}.focus-segment{min-width:0;border-radius:7px;display:flex;align-items:center;justify-content:center;color:white;font-size:.75rem;font-weight:700;overflow:hidden}.focus-segment.focus{background:#4779c6}.focus-segment.break{background:#55a88d}.focus-segment.current{outline:3px solid var(--theme-primary);outline-offset:2px}.focus-segment span{white-space:nowrap}.focus-plan-caption{font-size:.83rem;color:var(--theme-muted);margin:7px 0}.focus-legend{display:flex;gap:16px;justify-content:center;margin:12px 0;color:var(--theme-muted);font-size:.8rem}.focus-key{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px}.focus-blue{background:#4779c6}.focus-green{background:#55a88d}.focus-active-plan{margin:20px 0}@media(max-width:480px){.focus-break-settings{grid-template-columns:1fr}.focus-segment{font-size:.6rem}}
 </style>
+<style>
+/* Drag-to-create calendar event (mouse/trackpad) */
+.day-timeline{touch-action:pan-y;user-select:none}
+.calendar-drag-preview{position:absolute;left:3px;right:3px;z-index:5;pointer-events:none;border:2px solid var(--theme-primary,#5369df);background:color-mix(in srgb,var(--theme-primary,#5369df) 20%,transparent);border-radius:7px;padding:4px 6px;font-size:12px;font-weight:700;color:var(--theme-ink,#17243c);overflow:hidden}
+</style>
 </head><body><header><h1>StudyOS</h1><p>School + UCAT planning hub</p></header><main class="wrap"><div class="notice" id="status">Connecting to Supabase…</div><div class="panel" id="authPanel" style="max-width:470px;margin:22px auto"><h2>Welcome to StudyOS</h2><p class="muted">Sign in with your email and password on any device.</p><form id="loginForm"><label>Email<input id="email" type="email" required autocomplete="email"></label><label>Password<input id="password" type="password" minlength="6" required autocomplete="current-password"></label><div class="hide signup-setup" id="signupSetup"><h3>Personalise your workspace</h3><p class="muted">You can change these choices later. Each account has its own private records.</p><label>Are you preparing for the UCAT?<select id="signupUcat"><option value="yes">Yes — include UCAT tools</option><option value="no">No — school planner only</option></select></label><p class="muted">Enter up to six subjects. Leave any unused boxes blank.</p><div id="signupSubjects" class="subject-fields"><label>Subject 1<input class="signup-subject" placeholder="e.g. English" value=""></label><label>Subject 2<input class="signup-subject" placeholder="e.g. Methods" value=""></label><label>Subject 3<input class="signup-subject" placeholder="e.g. Chemistry" value=""></label><label>Subject 4<input class="signup-subject" placeholder="e.g. Physics" value=""></label><label>Subject 5<input class="signup-subject" placeholder="e.g. Biology" value=""></label><label>Subject 6<input class="signup-subject" placeholder="e.g. Economics" value=""></label></div></div><label class="hide" id="confirmPasswordWrap">Confirm password<input id="confirmPassword" type="password" minlength="8" autocomplete="new-password"></label><button type="submit" id="loginSubmit">Sign in</button></form><div class="row" style="justify-content:flex-start;margin-top:12px"><button class="secondary" type="button" id="signUpButton">Create account</button><button class="secondary" type="button" id="resetPasswordButton">Forgot password?</button></div><p class="muted" style="font-size:.85rem">Already used a magic link? Sign in once with your existing email link to set a password without losing your data.</p><button type="button" class="secondary" id="magicLinkButton">Use existing email sign-in link</button><p id="authMessage" class="muted" role="status" aria-live="polite"></p></div><div class="panel hide" id="accountPanel"><div class="row"><span id="accountEmail"></span><button class="secondary" id="editStudyProfile">Subjects & UCAT settings</button><button class="secondary" id="setPassword">Set / change password</button><button class="secondary" id="signOut">Sign out</button></div><p class="muted">Changes sync to Supabase. Avoid editing simultaneously on two devices.</p><button class="secondary" id="importLocal">Import older browser-only records (if any)</button></div><div id="privateApp" class="hide"><nav id="nav"></nav><div id="app"></div></div></main><footer>StudyOS · Cloud sync v2</footer><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script><script src="config.js"></script><script>
 const sections=['Dashboard','UCAT Practice','Error Patterns','Homework','Activity History','Tasks','Calendar'];let subjects=['Specialist Maths','Methods','Chemistry','Physics','Economics'];const types={VR:['General VR','True / False / Can’t Tell','Other VR'],DM:['General DM','Syllogisms','Logic Puzzles','Interpreting Information','Probability','Venn Diagrams','Arguments'],QR:['General QR']};
 const storeKey='studyos-preview-v1';const empty=()=>({sessions:[],errors:[],homework:[],tasks:[],events:[],studyLogs:[],milestones:[],topics:[],dailyPlans:[],weeklyReviews:[],profile:null});let data=empty();let page='Dashboard';const $=id=>document.getElementById(id);
@@ -210,6 +215,53 @@ bind=function(){originalBind();
   f.elements.allDay.onchange=toggleTimes;
   document.querySelectorAll('[data-new-event],[data-day]').forEach(el=>el.addEventListener('click',e=>{if(e.target.closest('[data-edit-event]'))return;showEvent(null);f.elements.date.value=el.dataset.newEvent||el.dataset.day;f.elements.title.focus()}));
   document.querySelectorAll('[data-week-day]').forEach(el=>el.addEventListener('click',e=>{if(e.target.closest('[data-edit-event]'))return;showEvent(null);f.elements.date.value=el.dataset.weekDay;const rect=el.getBoundingClientRect();let min=Math.max(0,Math.min(15*60,Math.floor((e.clientY-rect.top)/30)*30));let h=6+Math.floor(min/60),m=min%60;f.elements.time.value=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');f.elements.endTime.value=String(Math.min(h+1,23)).padStart(2,'0')+':'+String(m).padStart(2,'0');f.elements.title.focus()}));
+  // Desktop: drag across a day to choose an event's start and end time.
+  // Touch devices retain the existing tap-to-create interaction.
+  document.querySelectorAll('[data-week-day]').forEach(column=>{
+    let drag=null;
+    const snap=y=>Math.max(0,Math.min(960,Math.round(y/15)*15));
+    const clock=minutes=>`${String(Math.floor(minutes/60)).padStart(2,'0')}:${String(minutes%60).padStart(2,'0')}`;
+    const position=e=>snap(e.clientY-column.getBoundingClientRect().top);
+    column.addEventListener('pointerdown',e=>{
+      if(e.pointerType==='touch'||e.button!==0||e.target.closest('[data-edit-event]'))return;
+      const start=position(e);
+      drag={start,end:start,moved:false,preview:document.createElement('div')};
+      drag.preview.className='calendar-drag-preview';
+      drag.preview.style.top=start+'px';
+      drag.preview.style.height='2px';
+      column.appendChild(drag.preview);
+      column.setPointerCapture(e.pointerId);
+    });
+    column.addEventListener('pointermove',e=>{
+      if(!drag)return;
+      drag.end=position(e);
+      if(Math.abs(drag.end-drag.start)>=15)drag.moved=true;
+      const from=Math.min(drag.start,drag.end),to=Math.max(drag.start,drag.end);
+      drag.preview.style.top=from+'px';
+      drag.preview.style.height=Math.max(2,to-from)+'px';
+      drag.preview.textContent=drag.moved?`${clock(360+from)} – ${clock(360+to)}`:'';
+    });
+    const finish=e=>{
+      if(!drag)return;
+      const current=drag;drag=null;
+      current.preview.remove();
+      if(!current.moved)return; // A simple click still uses the normal one-hour quick add.
+      const start=Math.min(current.start,current.end);
+      const end=Math.min(960,Math.max(current.start,current.end));
+      if(end<=start)return;
+      showEvent(null);
+      f.elements.date.value=column.dataset.weekDay;
+      f.elements.allDay.checked=false;
+      toggleTimes();
+      f.elements.time.value=clock(360+start);
+      f.elements.endTime.value=clock(360+end);
+      f.elements.title.focus();
+      // Prevent the click fired after pointerup from overwriting the drag selection.
+      column.addEventListener('click',event=>{event.stopImmediatePropagation();event.preventDefault()}, {capture:true,once:true});
+    };
+    column.addEventListener('pointerup',finish);
+    column.addEventListener('pointercancel',()=>{if(drag){drag.preview.remove();drag=null}});
+  });
   document.querySelectorAll('[data-edit-event]').forEach(el=>el.onclick=e=>{e.stopPropagation();showEvent(data.events.find(x=>x.id===el.dataset.editEvent))});
   $('resetEventBtn').onclick=()=>showEvent(null);
   $('deleteEventBtn').onclick=async()=>{
