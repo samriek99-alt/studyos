@@ -505,7 +505,7 @@ bind=function(){
 let studyosAutoSyncLast=0;
 async function studyosAutoCalendarSync(force=false){
   if(!user||!loaded||googleSyncBusy||document.hidden)return;
-  if(!force&&Date.now()-studyosAutoSyncLast<10*60*1000)return;
+  if(!force&&Date.now()-studyosAutoSyncLast<2*60*1000)return;
   studyosAutoSyncLast=Date.now();
   if(googleConnectionStatus!=='connected'){
     try{await refreshGoogleCalendarStatus()}catch{return;}
@@ -514,7 +514,7 @@ async function studyosAutoCalendarSync(force=false){
     await syncGoogleCalendarNow();
   }
 }
-setInterval(()=>{void studyosAutoCalendarSync()},10*60*1000);
+setInterval(()=>{void studyosAutoCalendarSync()},2*60*1000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)void studyosAutoCalendarSync()});
 
 /* Manual two-way sync. Google-only events are imported as read-only copies.
@@ -604,5 +604,53 @@ async function syncGoogleCalendarNow(){
     const current=$('googleCalendarSyncNow');if(current)current.disabled=false;
   }
 }
+
+
+/* Sync after any local calendar-event change, including event edits and removals.
+   Debounce to avoid repeated API calls; do not loop on changes imported by sync. */
+let studyosChangeSyncTimer=null;
+let studyosChangeSyncPending=false;
+function studyosEventFingerprint(){
+  return JSON.stringify((data.events||[]).map(e=>({
+    id:e.id,title:e.title,date:e.date,time:e.time,endTime:e.endTime,
+    endDate:e.endDate,durationMinutes:e.durationMinutes,allDay:e.allDay,
+    kind:e.kind,googleEventId:e.googleEventId,googleCalendarId:e.googleCalendarId
+  })));
+}
+function studyosScheduleChangeSync(){
+  studyosChangeSyncPending=true;
+  clearTimeout(studyosChangeSyncTimer);
+  studyosChangeSyncTimer=setTimeout(async()=>{
+    if(!studyosChangeSyncPending||!user||!loaded||document.hidden)return;
+    if(googleSyncBusy){studyosScheduleChangeSync();return;}
+    studyosChangeSyncPending=false;
+    if(googleConnectionStatus!=='connected'){
+      try{await refreshGoogleCalendarStatus()}catch{return;}
+    }
+    if(googleConnectionStatus==='connected'){
+      studyosAutoSyncLast=Date.now();
+      await syncGoogleCalendarNow();
+    }
+  },1800);
+}
+const studyosSaveBeforeChangeSync=save;
+save=function(...args){
+  const before=studyosLastEventFingerprint;
+  const after=studyosEventFingerprint();
+  studyosLastEventFingerprint=after;
+  const result=studyosSaveBeforeChangeSync.apply(this,args);
+  if(before!==null&&before!==after&&!googleSyncBusy)studyosScheduleChangeSync();
+  return result;
+};
+let studyosLastEventFingerprint=null;
+const studyosLoadBeforeChangeSync=loadCloud;
+loadCloud=async function(...args){
+  const result=await studyosLoadBeforeChangeSync.apply(this,args);
+  studyosLastEventFingerprint=studyosEventFingerprint();
+  return result;
+};
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden&&studyosChangeSyncPending)studyosScheduleChangeSync();
+});
 
 </script></body></html>
