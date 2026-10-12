@@ -58,6 +58,7 @@ body{background:var(--theme-bg)}.wrap{max-width:1500px;padding:22px 26px 28px 26
 
 /* Focused dashboard / timer / responsive subject setup */
 .subject-fields{display:grid;grid-template-columns:1fr;gap:5px}.subject-fields label{margin:3px 0;font-size:.84rem}.subject-fields input{margin-top:3px}.today-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}.today-top h2{margin:0;font-size:1.65rem}.today-graph{width:100%;height:auto;max-height:255px}.today-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.8rem;color:var(--theme-muted)}.legend-dot{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px}.week-mini{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px;overflow-x:auto}.week-mini-day{min-width:94px;background:var(--theme-alt);border:1px solid var(--theme-line);border-radius:12px;padding:10px 7px;min-height:128px}.week-mini-day.is-current{outline:2px solid var(--theme-primary)}.week-mini-day strong{font-size:.78rem}.week-mini-day small{display:block;color:var(--theme-muted);margin-bottom:8px}.week-mini-entry{display:block;border-radius:6px;background:var(--theme-surface);border-left:3px solid var(--theme-primary);padding:5px;margin:5px 0;font-size:.69rem;overflow-wrap:anywhere}.study-launch{padding:15px 20px;font-size:1rem}.study-overlay{position:fixed;inset:0;background:var(--theme-bg);z-index:9999;overflow:auto;padding:24px;display:flex;align-items:center;justify-content:center}.study-room{width:min(680px,100%);background:var(--theme-surface);border:1px solid var(--theme-line);border-radius:26px;padding:clamp(20px,5vw,44px);box-shadow:0 18px 70px #0002;text-align:center}.study-room h2{font-size:1.5rem}.focus-clock{font-size:clamp(3.8rem,12vw,6.8rem);font-variant-numeric:tabular-nums;font-weight:800;letter-spacing:-.07em;margin:20px 0;color:var(--theme-primary)}.focus-progress{height:12px;background:var(--theme-alt);border-radius:12px;overflow:hidden}.focus-progress div{height:100%;background:var(--theme-primary);transition:width .4s}.study-room .toolbar{justify-content:center;margin:18px 0}.today-columns{display:grid;grid-template-columns:1.15fr .85fr;gap:14px}.today-columns>.panel{min-width:0}@media(max-width:800px){.today-columns{grid-template-columns:1fr}.week-mini{grid-template-columns:repeat(7,minmax(95px,1fr))}.study-overlay{padding:10px}.study-room{padding:20px}}
+.calendar-today-label{display:block;background:var(--theme-soft,#eef0ff);color:var(--theme-strong,#3846a5);border-radius:8px;padding:3px 0}
 </style><style>
 .task-planner-layout{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr);gap:16px;align-items:start}.task-backlog,.task-week-panel{min-width:0}.task-week-scroll{overflow-x:auto}.task-week-grid{display:grid;grid-template-columns:repeat(7,minmax(135px,1fr));gap:7px;min-width:960px}.plan-day{background:var(--theme-alt,#f4f6fb);border:1px solid var(--theme-line,#e3e8f4);border-radius:12px;min-height:285px;padding:9px}.plan-today{outline:2px solid var(--theme-primary,#535bd6)}.plan-day-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.plan-day-head span{font-size:.8rem;color:var(--theme-muted,#69758e)}.plan-event{border-radius:8px;background:var(--theme-soft,#e8edfa);padding:7px;margin-bottom:6px;font-size:.77rem;overflow-wrap:anywhere;border-left:3px solid var(--theme-primary,#535bd6)}.plan-event.work{border-color:#df9b45}.plan-event.exam{border-color:#e07789}.plan-event.personal,.plan-event.social{border-color:#54b780}.plan-event small{display:block;opacity:.75;margin-top:3px}.plan-task,.backlog-task{background:var(--theme-surface,#fff);border:1px solid var(--theme-line,#e3e8f4);border-left:3px solid var(--subject-color,#8491a6);border-radius:10px;padding:9px;margin-bottom:8px;overflow-wrap:anywhere}.backlog-task{cursor:grab}.backlog-task strong,.plan-task-title{font-size:.84rem}.backlog-task .muted{font-size:.75rem;margin-top:4px}.plan-task-actions{display:flex;flex-wrap:wrap;gap:4px;margin-top:9px}.plan-task-actions button{padding:5px 7px;font-size:.7rem;border-radius:7px}.plan-empty{font-size:.74rem;color:var(--theme-muted,#69758e);border:1px dashed var(--theme-line,#e3e8f4);border-radius:9px;padding:12px 7px;text-align:center}.plan-over{outline:2px dashed var(--theme-primary,#535bd6)}@media(max-width:950px){.task-planner-layout{grid-template-columns:1fr}.task-week-grid{min-width:900px}}#taskSchedulePanel{scroll-margin-top:24px}
 
@@ -102,7 +103,7 @@ const storeKey='studyos-preview-v1';const empty=()=>({sessions:[],errors:[],home
 let client=null, user=null, loaded=false, saveQueue=Promise.resolve();
 const message=t=>{$('status').textContent=t};
 function save(){if(!user||!loaded)return;const owner=user.id;const snapshot=JSON.parse(JSON.stringify(data));message('Saving changes…');saveQueue=saveQueue.catch(()=>{}).then(async()=>{if(!user||user.id!==owner)return;const {error}=await client.from('studyos_data').upsert({user_id:owner,content:snapshot,updated_at:new Date().toISOString()},{onConflict:'user_id'});if(error)throw error;message('Synced to cloud ✓')}).catch(e=>{message('Sync failed — '+e.message+'. Keep this page open and retry after checking your connection.');throw e});}
-async function loadCloud(){loaded=false;message('Loading your private StudyOS data…');const {data:row,error}=await client.from('studyos_data').select('content').eq('user_id',user.id).maybeSingle();if(error){message('Cannot load cloud data: '+error.message);return;}data=empty();if(row?.content){for(const k of Object.keys(data))if(Array.isArray(row.content[k]))data[k]=row.content[k];if(row.content.profile&&typeof row.content.profile==='object')data.profile=row.content.profile;}if(!data.profile){const m=user.user_metadata||{};data.profile={ucat:m.studyos_ucat!==false,subjects:Array.isArray(m.studyos_subjects)&&m.studyos_subjects.length?m.studyos_subjects:['Specialist Maths','Methods','Chemistry','Physics','Economics']};}applyStudyProfile();loaded=true;$('authPanel').classList.add('hide');$('accountPanel').classList.remove('hide');$('privateApp').classList.remove('hide');$('accountEmail').textContent=user.email;message('Connected — your changes sync to Supabase');render();}
+async function loadCloud(){loaded=false;message('Loading your private StudyOS data…');const {data:row,error}=await client.from('studyos_data').select('content').eq('user_id',user.id).maybeSingle();if(error){message('Cannot load cloud data: '+error.message);return;}data=empty();if(row?.content){for(const k of Object.keys(data))if(Array.isArray(row.content[k]))data[k]=row.content[k];if(row.content.profile&&typeof row.content.profile==='object')data.profile=row.content.profile;}if(!data.profile){const m=user.user_metadata||{};data.profile={ucat:m.studyos_ucat!==false,subjects:Array.isArray(m.studyos_subjects)&&m.studyos_subjects.length?m.studyos_subjects:['Specialist Maths','Methods','Chemistry','Physics','Economics']};}applyStudyProfile();loaded=true;$('authPanel').classList.add('hide');$('accountPanel').classList.remove('hide');$('privateApp').classList.remove('hide');$('accountEmail').textContent=user.email;message('Connected — your changes sync to Supabase');render();void studyosAutoCalendarSync(true);}
 function readSubjectBoxes(id){return [...new Set([...document.querySelectorAll('#'+id+' input')].map(x=>x.value.trim()).filter(Boolean))]}
 function subjectInputs(list,id){return `<div id="${id}" class="subject-fields">${Array.from({length:6},(_,i)=>`<label>Subject ${i+1}<input value="${safeAttr(list[i]||'')}" placeholder="Optional"></label>`).join('')}</div>`}
 function cleanSubjects(raw){return [...new Set(String(raw||'').split(/[,\n]/).map(x=>x.trim()).filter(Boolean))].slice(0,12)}
@@ -157,7 +158,7 @@ const eventClass=k=>/work/i.test(k)?'work':/exam/i.test(k)?'exam':/social/i.test
 function eventList(date){return data.events.filter(e=>e.date===date).sort((a,b)=>(a.time||'').localeCompare(b.time||''))}
 function eventLabel(e){return `${e.time&&!e.allDay?e.time+' ':''}${e.title}`}
 function calendar(){
- const base=calendarFocus, first=monday(new Date(base.getFullYear(),base.getMonth(),1)), ws=monday(base), current=calendarView==='month'?new Date(base.getFullYear(),base.getMonth(),1):ws;
+ const base=calendarFocus, first=monday(new Date(base.getFullYear(),base.getMonth(),1)), ws=addDays(base,-1), current=calendarView==='month'?new Date(base.getFullYear(),base.getMonth(),1):ws;
  const heading=calendarView==='month'?base.toLocaleDateString('en-AU',{month:'long',year:'numeric'}):`${humanDate(ws)} – ${humanDate(addDays(ws,6))}, ${ws.getFullYear()}`;
  let content='';
  if(calendarView==='month'){
@@ -166,7 +167,7 @@ function calendar(){
  }else{
   const days=Array.from({length:7},(_,i)=>addDays(ws,i));
   const hours=Array.from({length:16},(_,i)=>i+6);
-  content=`<div class="week-scroll"><div class="all-day-strip"><div class="muted" style="font-size:.7rem;padding:7px">All day</div>${days.map(d=>`<div class="all-day-cell">${eventList(dateISO(d)).filter(e=>e.allDay||!e.time).map(e=>`<button class="event-chip ${eventClass(e.kind)}" data-edit-event="${safeAttr(e.id)}">${esc(e.title)}</button>`).join('')}</div>`).join('')}</div><div class="week-grid"><div>${`<div class="week-header">Time</div>`}${hours.map(h=>`<div class="time-label">${String(h).padStart(2,'0')}:00</div>`).join('')}</div>${days.map(d=>{const iso=dateISO(d);const timed=eventList(iso).filter(e=>e.time&&!e.allDay);return `<div><div class="week-header">${d.toLocaleDateString('en-AU',{weekday:'short'})}<small>${humanDate(d)}</small></div><div class="day-timeline" data-week-day="${iso}">${timed.map(e=>{const [h,m]=e.time.split(':').map(Number);const [eh,em]=(e.endTime||'').split(':').map(Number);const top=Math.max(0,Math.min(955,(h-6)*60+m));const duration=Number.isFinite(eh)?Math.max(20,(eh-h)*60+(em-m)):60;return `<button class="week-event ${eventClass(e.kind)}" style="top:${top}px;height:${Math.min(duration,960-top)}px" data-edit-event="${safeAttr(e.id)}"><strong>${esc(e.time)}${e.endTime?'–'+esc(e.endTime):''}</strong><div>${esc(e.title)}</div></button>`}).join('')}</div></div>`}).join('')}</div></div>`;
+  content=`<div class="week-scroll"><div class="all-day-strip"><div class="muted" style="font-size:.7rem;padding:7px">All day</div>${days.map(d=>`<div class="all-day-cell">${eventList(dateISO(d)).filter(e=>e.allDay||!e.time).map(e=>`<button class="event-chip ${eventClass(e.kind)}" data-edit-event="${safeAttr(e.id)}">${esc(e.title)}</button>`).join('')}</div>`).join('')}</div><div class="week-grid"><div>${`<div class="week-header">Time</div>`}${hours.map(h=>`<div class="time-label">${String(h).padStart(2,'0')}:00</div>`).join('')}</div>${days.map(d=>{const iso=dateISO(d);const timed=eventList(iso).filter(e=>e.time&&!e.allDay);return `<div><div class="week-header"><span class="${iso===today()?'calendar-today-label':''}">${d.toLocaleDateString('en-AU',{weekday:'short'})}<small>${humanDate(d)}</small></span></div><div class="day-timeline" data-week-day="${iso}">${timed.map(e=>{const [h,m]=e.time.split(':').map(Number);const [eh,em]=(e.endTime||'').split(':').map(Number);const top=Math.max(0,Math.min(955,(h-6)*60+m));const duration=Number.isFinite(e.durationMinutes)&&e.durationMinutes>0?Math.max(20,e.durationMinutes):(Number.isFinite(eh)&&Number.isFinite(em)?Math.max(20,(eh-h)*60+(em-m)):60);return `<button class="week-event ${eventClass(e.kind)}" style="top:${top}px;height:${Math.min(duration,960-top)}px" data-edit-event="${safeAttr(e.id)}"><strong>${esc(e.time)}${e.endTime?'–'+esc(e.endTime):''}</strong><div>${esc(e.title)}</div></button>`}).join('')}</div></div>`}).join('')}</div></div>`;
  }
  const upcoming=data.events.filter(e=>e.date>=today()).sort((a,b)=>(a.date+' '+(a.time||'')).localeCompare(b.date+' '+(b.time||''))).slice(0,8);
  return `<div class="section-head"><div><h2>My calendar</h2><p class="muted">Make space for school, shifts and life.</p></div><button data-new-event="${dateISO(base)}">+ Add event</button></div><div class="calendar-layout"><div class="panel calendar-shell"><div class="section-head"><div class="toolbar"><button class="secondary" data-cal-step="-1" aria-label="Previous">‹</button><button class="secondary" data-cal-today>Today</button><button class="secondary" data-cal-step="1" aria-label="Next">›</button><strong>${esc(heading)}</strong></div><div class="pill-switch"><button data-cal-view="week" class="${calendarView==='week'?'selected':''}">Week</button><button data-cal-view="month" class="${calendarView==='month'?'selected':''}">Month</button></div></div>${content}</div><aside><div class="panel"><h3 id="eventFormTitle">${eventEditId?'Edit event':'Quick add event'}</h3><form id="eventForm"><label>Event title<input name="title" required placeholder="e.g. Work shift"></label><div class="grid"><label>Date<input name="date" type="date" value="${dateISO(base)}" required></label><label>Category<select name="kind">${opt(['Work','School deadline','Exam','Personal','Social','Other'])}</select></label></div><label style="display:flex;align-items:center;gap:7px"><input name="allDay" type="checkbox" style="width:auto;margin:0">All-day event</label><div class="grid" id="eventTimes"><label>Start time<input name="time" type="time" value="09:00"></label><label>End time<input name="endTime" type="time" value="10:00"></label></div><div class="event-form-actions"><button type="submit" id="saveEventBtn">Save event</button><button type="button" class="secondary" id="resetEventBtn">Clear</button><button type="button" class="secondary hide" id="deleteEventBtn">Delete</button></div></form></div><div class="panel"><h3>Coming up</h3>${upcoming.map(e=>`<div class="side-event"><span class="side-dot ${eventClass(e.kind)}"></span><div><strong>${esc(e.title)}</strong><small>${esc(e.date)} · ${esc(e.allDay||!e.time?'All day':e.time+(e.endTime?'–'+e.endTime:''))} · ${esc(e.kind)}</small></div></div>`).join('')||'<p class="muted">Nothing coming up yet.</p>'}</div></aside></div>`;
@@ -186,7 +187,7 @@ bind=function(){originalBind();
  if(page==='Calendar'){
   document.querySelectorAll('[data-cal-view]').forEach(b=>b.onclick=()=>{calendarView=b.dataset.calView;eventEditId=null;render()});
   document.querySelectorAll('[data-cal-step]').forEach(b=>b.onclick=()=>{calendarFocus=calendarView==='month'?new Date(calendarFocus.getFullYear(),calendarFocus.getMonth()+Number(b.dataset.calStep),1):addDays(calendarFocus,7*Number(b.dataset.calStep));eventEditId=null;render()});
-  const todayButton=$('[data-cal-today]');if(todayButton)todayButton.onclick=()=>{calendarFocus=new Date();eventEditId=null;render()};
+  const todayButton=$('[data-cal-today]');if(todayButton)todayButton.onclick=()=>{calendarFocus=dateObj(today());eventEditId=null;render();const scroller=document.querySelector('.week-scroll');if(scroller)scroller.scrollLeft=0;};
   const f=$('eventForm');
   function showEvent(e){eventEditId=e?.id||null;$('eventFormTitle').textContent=e?'Edit event':'Quick add event';f.elements.title.value=e?.title||'';f.elements.date.value=e?.date||dateISO(calendarFocus);f.elements.kind.value=e?.kind||'Work';f.elements.allDay.checked=!!(e?.allDay||e&&!e.time);f.elements.time.value=e?.time||'09:00';f.elements.endTime.value=e?.endTime||'10:00';$('saveEventBtn').textContent=e?'Update event':'Save event';$('deleteEventBtn').classList.toggle('hide',!e);toggleTimes();}
   function toggleTimes(){$('eventTimes').classList.toggle('hide',f.elements.allDay.checked)}
@@ -479,8 +480,26 @@ bind=function(){
   $('googleCalendarRefresh').addEventListener('click',refreshGoogleCalendarStatus);
   $('googleCalendarSyncNow').addEventListener('click',syncGoogleCalendarNow);
   if(googleConnectionStatus==='unknown')void refreshGoogleCalendarStatus();else updateGoogleCalendarPanel();
+  void studyosAutoCalendarSync();
 };
 
+
+/* Automatic sync when signed in, and every 10 minutes while StudyOS is open.
+   Do not run in background tabs or overlap another sync. */
+let studyosAutoSyncLast=0;
+async function studyosAutoCalendarSync(force=false){
+  if(!user||!loaded||googleSyncBusy||document.hidden)return;
+  if(!force&&Date.now()-studyosAutoSyncLast<10*60*1000)return;
+  studyosAutoSyncLast=Date.now();
+  if(googleConnectionStatus!=='connected'){
+    try{await refreshGoogleCalendarStatus()}catch{return;}
+  }
+  if(googleConnectionStatus==='connected'&&user&&loaded&&!googleSyncBusy){
+    await syncGoogleCalendarNow();
+  }
+}
+setInterval(()=>{void studyosAutoCalendarSync()},10*60*1000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)void studyosAutoCalendarSync()});
 
 /* Manual two-way sync. Google-only events are imported as read-only copies.
    StudyOS-owned events are tracked by their Google event IDs and last-synced snapshot. */
@@ -495,15 +514,15 @@ async function calendarSyncRequest(payload){
   return data;
 }
 function fromGoogleEvent(e){
-  const start=e?.start?.dateTime||'';
-  const date=e?.start?.date||start.slice(0,10);
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(date||'')||!e?.id)return null;
-  const allDay=!!e.start?.date;
-  let time='';
-  if(!allDay&&start){
-    try{time=new Intl.DateTimeFormat('en-GB',{timeZone:'Australia/Brisbane',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(start))}catch{}
-  }
-  return {title:e.summary||'(Untitled event)',date,time,endTime:'',allDay,kind:'Other',googleEventId:e.id,googleImported:e.extendedProperties?.private?.studyos!=='true'};
+  if(!e?.id || !e?.start)return null;
+  const allDay=!!e.start.date;
+  const fmt=new Intl.DateTimeFormat('en-GB',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+  const parts=value=>{const d=new Date(value);if(!Number.isFinite(d.getTime()))return null;const x=Object.fromEntries(fmt.formatToParts(d).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));return {date:`${x.year}-${x.month}-${x.day}`,time:`${x.hour}:${x.minute}`};};
+  const start=allDay?{date:e.start.date,time:''}:parts(e.start.dateTime);
+  if(!start||!/^\d{4}-\d{2}-\d{2}$/.test(start.date))return null;
+  const end=allDay?null:(e.end?.dateTime?parts(e.end.dateTime):null);
+  const durationMinutes=!allDay&&e.start.dateTime&&e.end?.dateTime?Math.round((Date.parse(e.end.dateTime)-Date.parse(e.start.dateTime))/60000):null;
+  return {title:e.summary||'(Untitled event)',date:start.date,time:start.time,endTime:end?.time||'',endDate:end?.date||'',durationMinutes:Number.isFinite(durationMinutes)&&durationMinutes>0?durationMinutes:null,allDay,kind:'Other',googleEventId:e.id,googleImported:e.extendedProperties?.private?.studyos!=='true'};
 }
 async function syncGoogleCalendarNow(){
   if(googleSyncBusy||!user||!loaded)return;
