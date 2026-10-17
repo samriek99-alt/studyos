@@ -106,7 +106,41 @@ html,body{max-width:100%;overflow-x:clip}
 .day-timeline{touch-action:pan-y;user-select:none}
 .calendar-drag-preview{position:absolute;left:3px;right:3px;z-index:5;pointer-events:none;border:2px solid var(--theme-primary,#5369df);background:color-mix(in srgb,var(--theme-primary,#5369df) 20%,transparent);border-radius:7px;padding:4px 6px;font-size:12px;font-weight:700;color:var(--theme-ink,#17243c);overflow:hidden}
 </style>
-</head><body><header><h1>StudyOS</h1><p>School + UCAT planning hub</p></header><main class="wrap"><div class="notice" id="status">Connecting to Supabase…</div><div class="panel" id="authPanel" style="max-width:470px;margin:22px auto"><h2>Welcome to StudyOS</h2><p class="muted">Sign in with your email and password on any device.</p><form id="loginForm"><label>Email<input id="email" type="email" required autocomplete="email"></label><label>Password<input id="password" type="password" minlength="6" required autocomplete="current-password"></label><div class="hide signup-setup" id="signupSetup"><h3>Personalise your workspace</h3><p class="muted">You can change these choices later. Each account has its own private records.</p><label>Are you preparing for the UCAT?<select id="signupUcat"><option value="yes">Yes — include UCAT tools</option><option value="no">No — school planner only</option></select></label><p class="muted">Enter up to six subjects. Leave any unused boxes blank.</p><div id="signupSubjects" class="subject-fields"><label>Subject 1<input class="signup-subject" placeholder="e.g. English" value=""></label><label>Subject 2<input class="signup-subject" placeholder="e.g. Methods" value=""></label><label>Subject 3<input class="signup-subject" placeholder="e.g. Chemistry" value=""></label><label>Subject 4<input class="signup-subject" placeholder="e.g. Physics" value=""></label><label>Subject 5<input class="signup-subject" placeholder="e.g. Biology" value=""></label><label>Subject 6<input class="signup-subject" placeholder="e.g. Economics" value=""></label></div></div><label class="hide" id="confirmPasswordWrap">Confirm password<input id="confirmPassword" type="password" minlength="8" autocomplete="new-password"></label><button type="submit" id="loginSubmit">Sign in</button></form><div class="row" style="justify-content:flex-start;margin-top:12px"><button class="secondary" type="button" id="signUpButton">Create account</button><button class="secondary" type="button" id="resetPasswordButton">Forgot password?</button></div><p class="muted" style="font-size:.85rem">Already used a magic link? Sign in once with your existing email link to set a password without losing your data.</p><button type="button" class="secondary" id="magicLinkButton">Use existing email sign-in link</button><p id="authMessage" class="muted" role="status" aria-live="polite"></p></div><div class="panel hide" id="accountPanel"><div class="row"><span id="accountEmail"></span><button class="secondary" id="editStudyProfile">Subjects & UCAT settings</button><button class="secondary" id="setPassword">Set / change password</button><button class="secondary" id="signOut">Sign out</button></div><p class="muted">Changes sync to Supabase. Avoid editing simultaneously on two devices.</p><button class="secondary" id="importLocal">Import older browser-only records (if any)</button></div><div id="privateApp" class="hide"><nav id="nav"></nav><div id="app"></div></div></main><footer>StudyOS · Cloud sync v2</footer><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script><script src="config.js"></script><script>
+</head><body><header><h1>StudyOS</h1><p>School + UCAT planning hub</p></header><main class="wrap"><div class="notice" id="status">Connecting to Supabase…</div><div class="panel" id="authPanel" style="max-width:470px;margin:22px auto"><h2>Welcome to StudyOS</h2><p class="muted">Sign in with your email and password on any device.</p><form id="loginForm"><label>Email<input id="email" type="email" required autocomplete="email"></label><label>Password<input id="password" type="password" minlength="6" required autocomplete="current-password"></label><div class="hide signup-setup" id="signupSetup"><h3>Personalise your workspace</h3><p class="muted">You can change these choices later. Each account has its own private records.</p><label>Are you preparing for the UCAT?<select id="signupUcat"><option value="yes">Yes — include UCAT tools</option><option value="no">No — school planner only</option></select></label><p class="muted">Enter up to six subjects. Leave any unused boxes blank.</p><div id="signupSubjects" class="subject-fields"><label>Subject 1<input class="signup-subject" placeholder="e.g. English" value=""></label><label>Subject 2<input class="signup-subject" placeholder="e.g. Methods" value=""></label><label>Subject 3<input class="signup-subject" placeholder="e.g. Chemistry" value=""></label><label>Subject 4<input class="signup-subject" placeholder="e.g. Physics" value=""></label><label>Subject 5<input class="signup-subject" placeholder="e.g. Biology" value=""></label><label>Subject 6<input class="signup-subject" placeholder="e.g. Economics" value=""></label></div></div><label class="hide" id="confirmPasswordWrap">Confirm password<input id="confirmPassword" type="password" minlength="8" autocomplete="new-password"></label><button type="submit" id="loginSubmit">Sign in</button></form><div class="row" style="justify-content:flex-start;margin-top:12px"><button class="secondary" type="button" id="signUpButton">Create account</button><button class="secondary" type="button" id="resetPasswordButton">Forgot password?</button></div><p class="muted" style="font-size:.85rem">Already used a magic link? Sign in once with your existing email link to set a password without losing your data.</p><button type="button" class="secondary" id="magicLinkButton">Use existing email sign-in link</button><p id="authMessage" class="muted" role="status" aria-live="polite"></p></div><div class="panel hide" id="accountPanel"><div class="row"><span id="accountEmail"></span><button class="secondary" id="editStudyProfile">Subjects & UCAT settings</button><button class="secondary" id="setPassword">Set / change password</button><button class="secondary" id="signOut">Sign out</button></div><p class="muted">Changes sync to Supabase. Avoid editing simultaneously on two devices.</p><button class="secondary" id="importLocal">Import older browser-only records (if any)</button></div><div id="privateApp" class="hide"><nav id="nav"></nav><div id="app"></div></div></main><footer>StudyOS · Cloud sync v2</footer><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js">
+/* Focus room fix: dashboard launcher and mobile now use the SAME timer/camera UI. */
+function focusRefreshUI(){
+ const overlay=document.getElementById('studyOverlay');
+ if(overlay){drawFocusRoom();return;}
+ render();
+}
+drawFocusRoom=function(){
+ const overlay=document.getElementById('studyOverlay');if(!overlay)return;
+ overlay.style.cssText='position:fixed;inset:0;z-index:9999;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;display:block;padding:12px 12px max(24px,env(safe-area-inset-bottom));background:var(--theme-bg,#f5f7fc);';
+ overlay.innerHTML='<div style="width:min(700px,100%);margin:0 auto;min-width:0;padding:0 0 18px"><div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="secondary" id="closeFocusRoom">✕ Close</button></div>'+timerCard()+'</div>';
+ document.getElementById('closeFocusRoom').onclick=()=>overlay.remove();
+ bind();
+};
+const focusOriginalStartRoom=openFocusRoom;
+openFocusRoom=function(){focusOriginalStartRoom();};
+
+</script><script src="config.js">
+/* Focus room fix: dashboard launcher and mobile now use the SAME timer/camera UI. */
+function focusRefreshUI(){
+ const overlay=document.getElementById('studyOverlay');
+ if(overlay){drawFocusRoom();return;}
+ render();
+}
+drawFocusRoom=function(){
+ const overlay=document.getElementById('studyOverlay');if(!overlay)return;
+ overlay.style.cssText='position:fixed;inset:0;z-index:9999;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;display:block;padding:12px 12px max(24px,env(safe-area-inset-bottom));background:var(--theme-bg,#f5f7fc);';
+ overlay.innerHTML='<div style="width:min(700px,100%);margin:0 auto;min-width:0;padding:0 0 18px"><div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="secondary" id="closeFocusRoom">✕ Close</button></div>'+timerCard()+'</div>';
+ document.getElementById('closeFocusRoom').onclick=()=>overlay.remove();
+ bind();
+};
+const focusOriginalStartRoom=openFocusRoom;
+openFocusRoom=function(){focusOriginalStartRoom();};
+
+</script><script>
 const sections=['Dashboard','UCAT Practice','Error Patterns','Homework','Activity History','Tasks','Calendar'];let subjects=['Specialist Maths','Methods','Chemistry','Physics','Economics'];const types={VR:['General VR','True / False / Can’t Tell','Other VR'],DM:['General DM','Syllogisms','Logic Puzzles','Interpreting Information','Probability','Venn Diagrams','Arguments'],QR:['General QR']};
 const storeKey='studyos-preview-v1';const empty=()=>({sessions:[],errors:[],homework:[],tasks:[],events:[],studyLogs:[],milestones:[],topics:[],dailyPlans:[],weeklyReviews:[],profile:null});let data=empty();let page='Dashboard';const $=id=>document.getElementById(id);
 let client=null, user=null, loaded=false, saveQueue=Promise.resolve();
@@ -738,6 +772,8 @@ document.addEventListener('visibilitychange',()=>{
 });
 
 
+/* Mobile focus room must scroll, including when the keyboard is visible. */
+
 /* StudyOS Focus Mode: unified timer and private timelapse */
 let focusView='timer',focusLimit=false,focusMinutes=60,focusSubject='',focusSessionId=null;
 let focusStream=null,focusCaptureTimer=null,focusWakeLock=null,focusFrames=[],focusRecording=false,focusUploading=false;
@@ -774,7 +810,7 @@ async function focusStartCamera(){
  if(!focusCloudReady){await focusCloudInit();if(!focusCloudReady)return alert('Set up private Supabase cloud storage first using the supplied SQL file.');}
  try{focusStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:640},height:{ideal:360}},audio:false});
  focusRecording=true;focusFrames=[];if(!timerStart)timerStart=Date.now();persistTimer();
- focusView='camera';render();const video=$('focusPreview');if(video){video.srcObject=focusStream;await video.play().catch(()=>{})}
+ focusView='camera';focusRefreshUI();const video=$('focusPreview');if(video){video.srcObject=focusStream;await video.play().catch(()=>{})}
  await focusWake();
  const canvas=document.createElement('canvas');canvas.width=640;canvas.height=360;const ctx=canvas.getContext('2d');
  const grab=()=>{if(!focusRecording||!video||video.readyState<2)return;try{ctx.drawImage(video,0,0,640,360);focusFrames.push(canvas.toDataURL('image/jpeg',0.65));if(focusFrames.length>=3600){focusSetStatus('Frame limit reached; finish and save this recording.');clearInterval(focusCaptureTimer)}}catch{}};
@@ -800,13 +836,13 @@ async function focusFinish(){if(focusUploading)return;const ms=elapsedMs();if(ms
  if(blob){focusSetStatus('Uploading private timelapse…');const id=crypto.randomUUID(),ext=blob.type.includes('mp4')?'mp4':'webm',path=user.id+'/'+id+'.'+ext;
  const up=await client.storage.from('study-timelapses').upload(path,blob,{contentType:blob.type,upsert:false});
  if(up.error){focusSetStatus('Video upload failed: '+up.error.message);alert('Cloud upload failed: '+up.error.message)}else{const r=await client.from('focus_recordings').insert({id,user_id:user.id,subject:focusSubject,duration_seconds:Math.round(ms/1000),storage_path:path});if(r.error){focusSetStatus('Video uploaded but history save failed: '+r.error.message)}else{focusSetStatus('Timelapse saved privately to StudyOS cloud ✓');await focusCloudInit()}}}
- data.studyLogs.push({id:uid(),date:today(),minutes:Math.max(1,Math.round(ms/60000)),subject:focusSubject,createdAt:new Date().toISOString()});timerStart=0;timerPausedMs=0;persistTimer();save();focusUploading=false;render();
+ data.studyLogs.push({id:uid(),date:today(),minutes:Math.max(1,Math.round(ms/60000)),subject:focusSubject,createdAt:new Date().toISOString()});timerStart=0;timerPausedMs=0;persistTimer();save();focusUploading=false;focusRefreshUI();
 }
 const focusOriginalBind=bind;
 bind=function(){focusOriginalBind();if(!$('focusPanel'))return;
  const subj=$('focusSubject');if(subj)subj.oninput=()=>{focusSubject=subj.value};
- const timerView=$('focusTimerView');if(timerView)timerView.onclick=()=>{focusView='timer';render()};
- const cameraView=$('focusCameraView');if(cameraView)cameraView.onclick=()=>{focusView='camera';render()};
+ const timerView=$('focusTimerView');if(timerView)timerView.onclick=()=>{focusView='timer';focusRefreshUI()};
+ const cameraView=$('focusCameraView');if(cameraView)cameraView.onclick=()=>{focusView='camera';focusRefreshUI()};
  const checkbox=$('focusLimit');if(checkbox)checkbox.onchange=()=>{focusLimit=checkbox.checked;$('focusLimitArea').style.display=focusLimit?'':'none'};
  const slider=$('focusDuration');if(slider)slider.oninput=()=>{focusMinutes=Number(slider.value);$('focusDurationLabel').textContent=focusMinutes+' minutes'};
  const start=$('focusCameraStart');if(start)start.onclick=()=>void focusStartCamera();
@@ -814,12 +850,29 @@ bind=function(){focusOriginalBind();if(!$('focusPanel'))return;
  const preview=$('focusPreview');if(preview&&focusStream){preview.srcObject=focusStream;preview.play().catch(()=>{})}
  const finish=$('timerFinish');if(finish)finish.onclick=()=>void focusFinish();
  const reset=$('timerReset');if(reset)reset.onclick=async()=>{if(!confirm('Discard this session and any unsaved camera frames?'))return;if(focusRecording){focusRecording=false;clearInterval(focusCaptureTimer);focusStream?.getTracks().forEach(t=>t.stop());focusStream=null;focusFrames=[];try{await focusWakeLock?.release()}catch{}}timerStart=0;timerPausedMs=0;persistTimer();render()};
- const toggle=$('timerToggle');if(toggle)toggle.onclick=()=>{if(timerStart){timerPausedMs+=Date.now()-timerStart;timerStart=0}else timerStart=Date.now();persistTimer();render()};
+ const toggle=$('timerToggle');if(toggle)toggle.onclick=()=>{if(timerStart){timerPausedMs+=Date.now()-timerStart;timerStart=0}else timerStart=Date.now();persistTimer();focusRefreshUI()};
  focusBindHistory();
 };
 setInterval(()=>{const d=$('focusDarkClock');if(d)d.textContent=focusClock(elapsedMs());const clock=$('timerClock');if(clock)clock.textContent=focusClock(elapsedMs());const remain=$('focusRemaining');if(remain&&focusLimit){const left=focusMinutes*60000-elapsedMs();remain.textContent=left<=0?'Duration reached — finish whenever you like':Math.ceil(left/60000)+' min until goal'}},1000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&focusRecording)void focusWake()});
 const focusLoadCloudBefore=loadCloud;
 loadCloud=async function(...args){const result=await focusLoadCloudBefore.apply(this,args);void focusCloudInit();return result};
+
+
+/* Focus room fix: dashboard launcher and mobile now use the SAME timer/camera UI. */
+function focusRefreshUI(){
+ const overlay=document.getElementById('studyOverlay');
+ if(overlay){drawFocusRoom();return;}
+ render();
+}
+drawFocusRoom=function(){
+ const overlay=document.getElementById('studyOverlay');if(!overlay)return;
+ overlay.style.cssText='position:fixed;inset:0;z-index:9999;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;display:block;padding:12px 12px max(24px,env(safe-area-inset-bottom));background:var(--theme-bg,#f5f7fc);';
+ overlay.innerHTML='<div style="width:min(700px,100%);margin:0 auto;min-width:0;padding:0 0 18px"><div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="secondary" id="closeFocusRoom">✕ Close</button></div>'+timerCard()+'</div>';
+ document.getElementById('closeFocusRoom').onclick=()=>overlay.remove();
+ bind();
+};
+const focusOriginalStartRoom=openFocusRoom;
+openFocusRoom=function(){focusOriginalStartRoom();};
 
 </script></body></html>
