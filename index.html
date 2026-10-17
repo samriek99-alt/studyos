@@ -737,4 +737,89 @@ document.addEventListener('visibilitychange',()=>{
   if(!document.hidden&&studyosChangeSyncPending)studyosScheduleChangeSync();
 });
 
+
+/* StudyOS Focus Mode: unified timer and private timelapse */
+let focusView='timer',focusLimit=false,focusMinutes=60,focusSubject='',focusSessionId=null;
+let focusStream=null,focusCaptureTimer=null,focusWakeLock=null,focusFrames=[],focusRecording=false,focusUploading=false;
+let focusHistory=[],focusCloudReady=false,focusCloudMessage='',focusRemoteTimer=null;
+const focusEsc=x=>String(x||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const focusClock=ms=>{let n=Math.max(0,Math.floor(ms/1000));return [Math.floor(n/3600),Math.floor(n/60)%60,n%60].map(x=>String(x).padStart(2,'0')).join(':')};
+const originalTimerCard=timerCard;
+timerCard=function(){
+ const running=!!timerStart, elapsed=elapsedMs(), target=focusMinutes*60000;
+ return `<div class="panel" id="focusPanel"><div class="section-head"><div><h2>Focus session</h2><p class="muted">Start freely. Set a duration only if you want one.</p></div></div>
+ <div class="toolbar" style="margin-bottom:14px"><button class="${focusView==='timer'?'':'secondary'}" id="focusTimerView">◷ Timer</button><button class="${focusView==='camera'?'':'secondary'}" id="focusCameraView">◉ Camera</button></div>
+ <label style="display:block;margin-bottom:6px">Subject (optional)</label><input id="focusSubject" placeholder="e.g. Specialist Maths" value="${focusEsc(focusSubject)}" style="max-width:330px;margin-bottom:12px" />
+ <div id="focusTimerArea" style="${focusView==='camera'?'display:none':''}"><div id="timerClock" class="study-timer">${focusClock(elapsed)}</div><p class="muted-mini" id="focusRemaining" style="text-align:center">${focusLimit?'Goal: '+focusMinutes+' minutes · '+(elapsed>=target?'Goal reached':Math.ceil((target-elapsed)/60000)+' min remaining'):'Open-ended session'}</p></div>
+ <div id="focusCameraArea" style="${focusView==='camera'?'':'display:none'}"><div style="background:#101115;border-radius:14px;padding:12px;text-align:center"><video id="focusPreview" autoplay muted playsinline style="width:100%;max-height:270px;object-fit:contain;background:#08090b;border-radius:10px"></video><p style="color:#d1d5db;margin:8px">${focusRecording?'● Recording timelapse':'Camera preview starts when you choose Start camera'}</p><button class="secondary" id="focusCameraStart" ${focusRecording?'disabled':''}>${focusRecording?'Camera recording':'Start camera recording'}</button>${focusRecording?'<button class="secondary" id="focusDarkMode" style="margin-left:8px">Distraction-free screen</button>':''}</div></div>
+ <label style="display:flex;gap:10px;align-items:center;margin-top:14px"><input type="checkbox" id="focusLimit" ${focusLimit?'checked':''} style="width:auto"> Set a duration (optional)</label>
+ <div id="focusLimitArea" style="${focusLimit?'':'display:none'};margin-top:10px"><input type="range" id="focusDuration" min="15" max="180" step="15" value="${focusMinutes}" style="width:100%"><span id="focusDurationLabel">${focusMinutes} minutes</span></div>
+ <div class="toolbar" style="margin-top:14px"><button id="timerToggle">${running?'Pause':elapsed?'Resume':'Start'}</button><button class="secondary" id="timerFinish" ${elapsed<1000?'disabled':''}>Finish & log</button><button class="secondary" id="timerReset">Reset</button></div>
+ <p class="muted-mini" id="focusStatus" style="margin-top:10px">${focusEsc(focusCloudMessage||'Timer and camera are part of one session. Keep this page open while filming.')}</p>
+ <div style="margin-top:22px"><h3>Timelapse history</h3><div id="focusHistory">${focusHistory.length?focusHistory.map(r=>`<div style="padding:10px 0;border-bottom:1px solid #8883"><strong>${focusEsc(r.subject||'Study session')}</strong> · ${Math.round(r.duration_seconds/60)} min · ${new Date(r.created_at).toLocaleDateString('en-AU')} <button class="secondary" data-focus-play="${focusEsc(r.id)}">Play</button> <button class="secondary" data-focus-delete="${focusEsc(r.id)}">Delete</button></div>`).join(''):'<p class="muted">No cloud timelapses yet.</p>'}</div></div></div>`;
+};
+const focusSetStatus=t=>{focusCloudMessage=t;const el=$('focusStatus');if(el)el.textContent=t};
+async function focusCloudInit(){
+ if(!client||!user)return;
+ const {data:rows,error}=await client.from('focus_recordings').select('id,subject,duration_seconds,created_at,storage_path').order('created_at',{ascending:false}).limit(60);
+ if(error){focusCloudReady=false;focusSetStatus('Cloud recording setup required: run the supplied Supabase SQL. '+error.message);return}
+ focusCloudReady=true;focusHistory=rows||[];focusRenderHistory();
+}
+function focusRenderHistory(){const h=$('focusHistory');if(!h)return;h.innerHTML=focusHistory.length?focusHistory.map(r=>`<div style="padding:10px 0;border-bottom:1px solid #8883"><strong>${focusEsc(r.subject||'Study session')}</strong> · ${Math.round(r.duration_seconds/60)} min · ${new Date(r.created_at).toLocaleDateString('en-AU')} <button class="secondary" data-focus-play="${focusEsc(r.id)}">Play</button> <button class="secondary" data-focus-delete="${focusEsc(r.id)}">Delete</button></div>`).join(''):'<p class="muted">No cloud timelapses yet.</p>';focusBindHistory()}
+function focusBindHistory(){document.querySelectorAll('[data-focus-play]').forEach(b=>b.onclick=async()=>{const r=focusHistory.find(x=>x.id===b.dataset.focusPlay);if(!r)return;const {data:d,error}=await client.storage.from('study-timelapses').createSignedUrl(r.storage_path,3600);if(error)return alert(error.message);window.open(d.signedUrl,'_blank','noopener')});document.querySelectorAll('[data-focus-delete]').forEach(b=>b.onclick=async()=>{const r=focusHistory.find(x=>x.id===b.dataset.focusDelete);if(!r||!confirm('Delete this timelapse permanently?'))return;const a=await client.storage.from('study-timelapses').remove([r.storage_path]);if(a.error)return alert(a.error.message);const z=await client.from('focus_recordings').delete().eq('id',r.id);if(z.error)return alert(z.error.message);focusHistory=focusHistory.filter(x=>x.id!==r.id);focusRenderHistory()})}
+async function focusWake(){if(!focusRecording||document.hidden||!('wakeLock' in navigator))return;try{focusWakeLock=await navigator.wakeLock.request('screen')}catch{focusSetStatus('Keep your iPhone screen awake; Safari did not grant a wake lock.')}}
+async function focusStartCamera(){
+ if(focusRecording)return;
+ if(!navigator.mediaDevices?.getUserMedia)return alert('Camera access needs HTTPS and a supported browser.');
+ if(!focusCloudReady){await focusCloudInit();if(!focusCloudReady)return alert('Set up private Supabase cloud storage first using the supplied SQL file.');}
+ try{focusStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:640},height:{ideal:360}},audio:false});
+ focusRecording=true;focusFrames=[];if(!timerStart)timerStart=Date.now();persistTimer();
+ focusView='camera';render();const video=$('focusPreview');if(video){video.srcObject=focusStream;await video.play().catch(()=>{})}
+ await focusWake();
+ const canvas=document.createElement('canvas');canvas.width=640;canvas.height=360;const ctx=canvas.getContext('2d');
+ const grab=()=>{if(!focusRecording||!video||video.readyState<2)return;try{ctx.drawImage(video,0,0,640,360);focusFrames.push(canvas.toDataURL('image/jpeg',0.65));if(focusFrames.length>=3600){focusSetStatus('Frame limit reached; finish and save this recording.');clearInterval(focusCaptureTimer)}}catch{}};
+ grab();focusCaptureTimer=setInterval(grab,3000);
+ focusSetStatus('Recording · 1 frame every 3 seconds · keep Safari visible and screen awake.');
+ }catch(e){focusRecording=false;focusStream?.getTracks().forEach(t=>t.stop());focusStream=null;alert('Camera could not start: '+e.message)}
+}
+async function focusStopCamera(){if(!focusRecording)return null;focusRecording=false;clearInterval(focusCaptureTimer);focusCaptureTimer=null;focusStream?.getTracks().forEach(t=>t.stop());focusStream=null;try{await focusWakeLock?.release()}catch{}focusWakeLock=null;
+ if(!focusFrames.length)return null;
+ // Repaint saved frames at 60fps and encode a real 60fps timelapse. The encoding itself takes playback time.
+ const canvas=document.createElement('canvas');canvas.width=640;canvas.height=360;
+ if(!canvas.captureStream||!window.MediaRecorder)throw Error('This Safari version cannot encode a timelapse from a canvas.');
+ const stream=canvas.captureStream(60),options=['video/mp4;codecs=avc1.42E01E','video/mp4','video/webm;codecs=vp9','video/webm'].find(x=>MediaRecorder.isTypeSupported(x));
+ if(!options)throw Error('No supported browser video encoder.');
+ const recorder=new MediaRecorder(stream,{mimeType:options,videoBitsPerSecond:900000});const chunks=[];recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
+ const result=new Promise((resolve,reject)=>{recorder.onerror=()=>reject(Error('Video encoding failed'));recorder.onstop=()=>resolve(new Blob(chunks,{type:options}))});
+ const ctx=canvas.getContext('2d');recorder.start();
+ for(const src of focusFrames){const img=new Image();img.src=src;await img.decode();ctx.drawImage(img,0,0,640,360);await new Promise(r=>setTimeout(r,1000/60));}
+ await new Promise(r=>setTimeout(r,120));recorder.stop();const blob=await result;stream.getTracks().forEach(t=>t.stop());focusFrames=[];return blob;
+}
+async function focusFinish(){if(focusUploading)return;const ms=elapsedMs();if(ms<1000)return;focusSubject=$('focusSubject')?.value?.trim()||focusSubject;focusUploading=true;let blob=null;
+ if(focusRecording){focusSetStatus('Creating 60 FPS timelapse. Please keep this page open…');try{blob=await focusStopCamera()}catch(e){focusSetStatus('Video could not be encoded: '+e.message);alert('Video processing failed. Study time will still be saved. '+e.message)}}
+ if(blob){focusSetStatus('Uploading private timelapse…');const id=crypto.randomUUID(),ext=blob.type.includes('mp4')?'mp4':'webm',path=user.id+'/'+id+'.'+ext;
+ const up=await client.storage.from('study-timelapses').upload(path,blob,{contentType:blob.type,upsert:false});
+ if(up.error){focusSetStatus('Video upload failed: '+up.error.message);alert('Cloud upload failed: '+up.error.message)}else{const r=await client.from('focus_recordings').insert({id,user_id:user.id,subject:focusSubject,duration_seconds:Math.round(ms/1000),storage_path:path});if(r.error){focusSetStatus('Video uploaded but history save failed: '+r.error.message)}else{focusSetStatus('Timelapse saved privately to StudyOS cloud ✓');await focusCloudInit()}}}
+ data.studyLogs.push({id:uid(),date:today(),minutes:Math.max(1,Math.round(ms/60000)),subject:focusSubject,createdAt:new Date().toISOString()});timerStart=0;timerPausedMs=0;persistTimer();save();focusUploading=false;render();
+}
+const focusOriginalBind=bind;
+bind=function(){focusOriginalBind();if(!$('focusPanel'))return;
+ const subj=$('focusSubject');if(subj)subj.oninput=()=>{focusSubject=subj.value};
+ const timerView=$('focusTimerView');if(timerView)timerView.onclick=()=>{focusView='timer';render()};
+ const cameraView=$('focusCameraView');if(cameraView)cameraView.onclick=()=>{focusView='camera';render()};
+ const checkbox=$('focusLimit');if(checkbox)checkbox.onchange=()=>{focusLimit=checkbox.checked;$('focusLimitArea').style.display=focusLimit?'':'none'};
+ const slider=$('focusDuration');if(slider)slider.oninput=()=>{focusMinutes=Number(slider.value);$('focusDurationLabel').textContent=focusMinutes+' minutes'};
+ const start=$('focusCameraStart');if(start)start.onclick=()=>void focusStartCamera();
+ const dark=$('focusDarkMode');if(dark)dark.onclick=()=>{const overlay=document.createElement('div');overlay.id='focusDarkOverlay';overlay.style.cssText='position:fixed;inset:0;background:#050505;color:#bbb;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px';overlay.innerHTML='<div style="font-size:12px;letter-spacing:3px;color:#a8a8a8">● RECORDING</div><div id="focusDarkClock" style="font-size:36px;font-variant-numeric:tabular-nums">'+focusClock(elapsedMs())+'</div><button id="focusDarkExit" style="background:#222;color:white;border:1px solid #555;padding:12px 20px;border-radius:10px">Show controls</button>';document.body.append(overlay);$('focusDarkExit').onclick=()=>overlay.remove();};
+ const preview=$('focusPreview');if(preview&&focusStream){preview.srcObject=focusStream;preview.play().catch(()=>{})}
+ const finish=$('timerFinish');if(finish)finish.onclick=()=>void focusFinish();
+ const reset=$('timerReset');if(reset)reset.onclick=async()=>{if(!confirm('Discard this session and any unsaved camera frames?'))return;if(focusRecording){focusRecording=false;clearInterval(focusCaptureTimer);focusStream?.getTracks().forEach(t=>t.stop());focusStream=null;focusFrames=[];try{await focusWakeLock?.release()}catch{}}timerStart=0;timerPausedMs=0;persistTimer();render()};
+ const toggle=$('timerToggle');if(toggle)toggle.onclick=()=>{if(timerStart){timerPausedMs+=Date.now()-timerStart;timerStart=0}else timerStart=Date.now();persistTimer();render()};
+ focusBindHistory();
+};
+setInterval(()=>{const d=$('focusDarkClock');if(d)d.textContent=focusClock(elapsedMs());const clock=$('timerClock');if(clock)clock.textContent=focusClock(elapsedMs());const remain=$('focusRemaining');if(remain&&focusLimit){const left=focusMinutes*60000-elapsedMs();remain.textContent=left<=0?'Duration reached — finish whenever you like':Math.ceil(left/60000)+' min until goal'}},1000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&focusRecording)void focusWake()});
+const focusLoadCloudBefore=loadCloud;
+loadCloud=async function(...args){const result=await focusLoadCloudBefore.apply(this,args);void focusCloudInit();return result};
+
 </script></body></html>
