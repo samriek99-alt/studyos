@@ -782,7 +782,7 @@ let focusMirrorCorrected=true;
 let focusRecordingLandscape=false,focusRecordingRotation=0,focusFrameWidth=640,focusFrameHeight=360;
 const focusTimelapseFrameHold=10; // 10 frames at 60 FPS per capture: approximately 18x real time.
 
-let focusFacing='environment',focusFullScreen=false,focusCameraVideo=null,focusCameraStarting=false,focusPreviewReady=false;
+let focusFacing='user',focusFullScreen=false,focusCameraVideo=null,focusCameraStarting=false,focusPreviewReady=false;
 const focusEsc=x=>String(x||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const focusClock=ms=>{let n=Math.max(0,Math.floor(ms/1000));return [Math.floor(n/3600),Math.floor(n/60)%60,n%60].map(x=>String(x).padStart(2,'0')).join(':')};
 const originalTimerCard=timerCard;
@@ -819,12 +819,12 @@ function focusCameraScreen(){
  <div style="position:absolute;z-index:2;top:0;left:0;right:0;padding:calc(8px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) 8px calc(10px + env(safe-area-inset-left));display:flex;align-items:center;justify-content:space-between;gap:8px;background:linear-gradient(#0004,transparent);pointer-events:none">
   <button id="focusCameraBack" type="button" style="pointer-events:auto;background:#14182088;color:white;border:1px solid #ffffff55;border-radius:12px;padding:9px 12px;font-size:14px">← Back</button>
   <span id="focusRecLabel" style="font-size:13px;font-weight:700;letter-spacing:1px;text-shadow:0 1px 5px #000;color:${focusRecording?'#ff6969':'#fff'}">${focusRecording?'● REC':'Camera preview'}</span>
-  <div style="display:flex;gap:7px;pointer-events:auto"><button id="focusWideToggle" type="button" style="background:#14182088;color:white;border:1px solid #ffffff55;border-radius:12px;padding:9px 11px;font-size:13px">0.5×</button><button id="focusMirrorToggle" type="button" style="background:#14182088;color:white;border:1px solid #ffffff55;border-radius:12px;padding:9px 11px;font-size:13px">↔ Reverse</button><button id="focusFlip" type="button" style="background:#14182088;color:white;border:1px solid #ffffff55;border-radius:12px;padding:9px 11px;font-size:13px">↻ Flip</button></div>
+  <div style="display:flex;gap:7px;pointer-events:auto"><button id="focusWideToggle" type="button" style="background:#14182088;color:white;border:1px solid #ffffff55;border-radius:12px;padding:9px 11px;font-size:13px">Wide</button><button id="focusMirrorToggle" type="button" style="background:#14182088;color:white;border:1px solid #ffffff55;border-radius:12px;padding:9px 11px;font-size:13px">↔ Reverse</button><button id="focusFlip" type="button" style="background:#14182088;color:white;border:1px solid #ffffff55;border-radius:12px;padding:9px 11px;font-size:13px">↻ Flip</button></div>
  </div>
  <div style="position:absolute;z-index:2;bottom:0;left:0;right:0;padding:14px calc(12px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));background:linear-gradient(transparent,#0005 65%,#0007);display:flex;flex-direction:column;align-items:center;gap:9px;pointer-events:none">
   <div id="focusFullClock" style="font-size:clamp(18px,4vw,28px);font-weight:650;font-variant-numeric:tabular-nums;text-shadow:0 2px 6px #000">${focusRecording?focusClock(elapsedMs()):'Ready to record'}</div>
   <div style="display:flex;justify-content:center;gap:9px;flex-wrap:wrap;pointer-events:auto"><button id="focusRecordNow" type="button" style="display:${focusRecording?'none':'inline-block'};background:#c93642;color:white;border:0;border-radius:12px;padding:12px 24px;font-size:16px;font-weight:700">● Start recording</button><button id="focusDimToggle" type="button" style="display:${focusRecording?'inline-block':'none'};background:#14182088;color:white;border:1px solid #ffffff55;border-radius:12px;padding:11px 14px;font-size:14px">Dim screen</button><button id="focusFullFinish" type="button" style="display:${focusRecording?'inline-block':'none'};background:#c93642;color:white;border:0;border-radius:12px;padding:11px 18px;font-size:15px;font-weight:700">Finish & save</button></div>
-  <div id="focusFullStatus" style="font-size:11px;text-align:center;text-shadow:0 1px 5px #000;color:#e1e4e9">${focusRecording?'Capturing timelapse · keep this page visible':'Position your phone, then tap Start recording'}</div>
+  <div id="focusFullStatus" style="font-size:11px;text-align:center;text-shadow:0 1px 5px #000;color:#e1e4e9">${focusRecording?'Capturing timelapse · keep this page visible':'Front camera · position your phone, then tap Start recording'}</div>
  </div>`;
  focusCameraVideo=document.getElementById('focusLiveVideo');focusCameraVideo.srcObject=focusStream;focusCameraVideo.play().catch(()=>{});
  document.getElementById('focusFlip').onclick=()=>void focusFlipCamera();
@@ -837,34 +837,28 @@ function focusCameraScreen(){
  focusFullScreen=true;
 }
 function focusCloseCameraScreen(release=false){document.getElementById('focusCameraScreen')?.remove();focusFullScreen=false;focusCameraVideo=null;if(release&&!focusRecording){focusStream?.getTracks().forEach(t=>t.stop());focusStream=null;focusPreviewReady=false;}}
-// Prefer the physical ultrawide lens when the browser exposes it. Never fake 0.5x by cropping.
+// Ask the active (front-facing by default) camera for its widest optical view.
+// Browser APIs cannot force iPhone's native wide selfie framing if not exposed.
 async function focusSetUltraWide(){
  const btn=document.getElementById('focusWideToggle');
- if(!focusStream||focusRecording){if(btn)btn.textContent='0.5×';return}
- if(btn){btn.disabled=true;btn.textContent='Finding…'}
+ if(!focusStream||focusRecording)return;
+ if(btn){btn.disabled=true;btn.textContent='Checking…'}
  try{
-  if(focusFacing!=='environment'){
-   await focusFlipCamera();
+  const track=focusStream.getVideoTracks()[0];
+  const caps=track.getCapabilities?.()||{};
+  if(caps.zoom&&Number.isFinite(caps.zoom.min)){
+   await track.applyConstraints({advanced:[{zoom:caps.zoom.min}]});
+   if(btn)btn.textContent='Wide ✓';
+  }else{
+   const status=document.getElementById('focusFullStatus');
+   if(status)status.textContent='Using the widest front-camera view Chrome makes available.';
+   if(btn)btn.textContent='Wide';
   }
-  const devices=await navigator.mediaDevices.enumerateDevices();
-  const wide=devices.find(d=>d.kind==='videoinput'&&/ultra[ -]?wide|0\.5x|0\.5×/i.test(d.label));
-  if(wide){
-   const next=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:wide.deviceId}},audio:false});
-   focusStream?.getTracks().forEach(t=>t.stop());focusStream=next;
-   if(focusCameraVideo){focusCameraVideo.srcObject=next;await focusCameraVideo.play()}
-   if(btn)btn.textContent='0.5× ✓';return;
-  }
-  const track=focusStream?.getVideoTracks()[0];
-  const caps=track?.getCapabilities?.();
-  if(caps?.zoom&&caps.zoom.min<=0.5&&caps.zoom.max>=0.5){
-   await track.applyConstraints({advanced:[{zoom:0.5}]});
-   if(btn)btn.textContent='0.5× ✓';return;
-  }
+ }catch(e){
   const status=document.getElementById('focusFullStatus');
-  if(status)status.textContent='Chrome does not expose the iPhone 0.5× lens here. Using the widest available camera.';
-  if(btn)btn.textContent='0.5× unavailable';
- }catch(e){const status=document.getElementById('focusFullStatus');if(status)status.textContent='0.5× camera unavailable: '+e.message;if(btn)btn.textContent='0.5× unavailable'}
- finally{if(btn)btn.disabled=false}
+  if(status)status.textContent='Wide view unavailable in this browser: '+e.message;
+  if(btn)btn.textContent='Wide';
+ }finally{if(btn)btn.disabled=false}
 }
 async function focusFlipCamera(){
  if(focusCameraStarting||!focusStream)return;
@@ -875,9 +869,17 @@ async function focusFlipCamera(){
   focusStream.getTracks().forEach(t=>t.stop());
   focusStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:next},width:{ideal:1280},height:{ideal:720}},audio:false});
   focusFacing=next;
+  await focusApplyWidestZoom();
   if(focusCameraVideo){focusCameraVideo.srcObject=focusStream;await focusCameraVideo.play()}
  }catch(e){focusSetStatus('Could not flip camera: '+e.message);const st=document.getElementById('focusFullStatus');if(st)st.textContent='Camera switch failed: '+e.message}
  finally{focusCameraStarting=false;if(button)button.disabled=false}
+}
+async function focusApplyWidestZoom(){
+ try{
+  const track=focusStream?.getVideoTracks()[0];
+  const zoom=track?.getCapabilities?.()?.zoom;
+  if(zoom&&Number.isFinite(zoom.min))await track.applyConstraints({advanced:[{zoom:zoom.min}]});
+ }catch{} // Not all iPhone browsers expose camera zoom.
 }
 async function focusStartCamera(){
  if(focusRecording||focusCameraStarting)return;
@@ -885,6 +887,7 @@ async function focusStartCamera(){
  focusCameraStarting=true;
  try{
   if(!focusStream)focusStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:focusFacing},width:{ideal:1280},height:{ideal:720}},audio:false});
+  await focusApplyWidestZoom();
   focusPreviewReady=true;focusView='camera';focusCameraScreen();
  }catch(e){focusStream?.getTracks().forEach(t=>t.stop());focusStream=null;focusPreviewReady=false;focusCloseCameraScreen();alert('Camera preview could not start: '+e.message+'\n\nAllow Chrome camera access in iPhone Settings and open StudyOS directly in Chrome.');}
  finally{focusCameraStarting=false}
