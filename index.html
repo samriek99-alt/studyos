@@ -779,6 +779,9 @@ let focusView='timer',focusLimit=false,focusMinutes=60,focusSubject='',focusSess
 let focusStream=null,focusCaptureTimer=null,focusWakeLock=null,focusFrames=[],focusRecording=false,focusUploading=false;
 let focusHistory=[],focusCloudReady=false,focusCloudMessage='',focusRemoteTimer=null;
 let focusMirrorCorrected=true;
+let focusRecordingLandscape=false,focusRecordingRotation=0,focusFrameWidth=640,focusFrameHeight=360;
+const focusTimelapseFrameHold=10; // 10 frames at 60 FPS per capture: approximately 18x real time.
+
 let focusFacing='environment',focusFullScreen=false,focusCameraVideo=null,focusCameraStarting=false,focusPreviewReady=false;
 const focusEsc=x=>String(x||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const focusClock=ms=>{let n=Math.max(0,Math.floor(ms/1000));return [Math.floor(n/3600),Math.floor(n/60)%60,n%60].map(x=>String(x).padStart(2,'0')).join(':')};
@@ -849,31 +852,45 @@ async function focusBeginRecording(){
  const btn=document.getElementById('focusRecordNow');if(btn){btn.disabled=true;btn.textContent='Starting…'}
  if(!focusCloudReady){await focusCloudInit();if(!focusCloudReady){alert('Set up private Supabase cloud storage first using the supplied SQL file.');if(btn){btn.disabled=false;btn.textContent='● Start recording'}return}}
  focusRecording=true;focusFrames=[];if(!timerStart)timerStart=Date.now();persistTimer();focusCameraScreen();await focusWake();
- const canvas=document.createElement('canvas');canvas.width=640;canvas.height=360;const ctx=canvas.getContext('2d');
+ // Lock the intended output orientation at the moment recording starts.
+ // Screen orientation is preferred over viewport dimensions on mobile browsers.
+ const orientationType=screen.orientation?.type||'';
+ const orientationAngle=typeof screen.orientation?.angle==='number'?screen.orientation.angle:(typeof window.orientation==='number'?window.orientation:0);
+ focusRecordingLandscape=orientationType.startsWith('landscape')||(!orientationType&&((Math.abs(orientationAngle)%180===90)||innerWidth>innerHeight));
+ focusRecordingRotation=orientationAngle===270||orientationAngle===-90?-90:90;
+ focusFrameWidth=focusRecordingLandscape?640:360;focusFrameHeight=focusRecordingLandscape?360:640;
+ const canvas=document.createElement('canvas');canvas.width=focusFrameWidth;canvas.height=focusFrameHeight;const ctx=canvas.getContext('2d');
  const grab=()=>{const video=focusCameraVideo;if(!focusRecording||!video||video.readyState<2)return;try{
-  // Match the recorded frame to the on-screen camera orientation.
-  ctx.fillStyle='#000';ctx.fillRect(0,0,640,360);
   const w=video.videoWidth,h=video.videoHeight;if(!w||!h)return;
-  const scale=Math.min(640/w,360/h),dw=w*scale,dh=h*scale;
-  ctx.save();if(focusMirrorCorrected){ctx.translate(640,0);ctx.scale(-1,1)}
-  ctx.drawImage(video,(640-dw)/2,(360-dh)/2,dw,dh);ctx.restore();
+  const cw=canvas.width,ch=canvas.height;
+  // If the phone is landscape but the camera stream is portrait (or vice versa),
+  // rotate pixels instead of merely changing the video container's dimensions.
+  const sourceLandscape=w>=h;
+  const needsRotation=sourceLandscape!==focusRecordingLandscape;
+  const effectiveW=needsRotation?h:w,effectiveH=needsRotation?w:h;
+  const scale=Math.min(cw/effectiveW,ch/effectiveH),dw=w*scale,dh=h*scale;
+  ctx.fillStyle='#000';ctx.fillRect(0,0,cw,ch);ctx.save();
+  ctx.translate(cw/2,ch/2);
+  if(focusMirrorCorrected)ctx.scale(-1,1);
+  if(needsRotation)ctx.rotate(focusRecordingRotation*Math.PI/180);
+  ctx.drawImage(video,-dw/2,-dh/2,dw,dh);ctx.restore();
   focusFrames.push(canvas.toDataURL('image/jpeg',0.65));
   if(focusFrames.length>=3600){focusSetStatus('Frame limit reached; finish and save.');clearInterval(focusCaptureTimer)}
- }catch{}};
+ }catch(e){console.warn('StudyOS timelapse capture:',e)}};
  grab();focusCaptureTimer=setInterval(grab,3000);
- focusSetStatus('Recording · one frame every 3 seconds · keep your screen awake.');
+ focusSetStatus('Recording · ~18× timelapse · '+(focusRecordingLandscape?'landscape':'portrait')+' video · keep screen awake.');
 }
 async function focusStopCamera(){if(!focusRecording)return null;focusRecording=false;focusCloseCameraScreen();clearInterval(focusCaptureTimer);focusCaptureTimer=null;focusStream?.getTracks().forEach(t=>t.stop());focusStream=null;try{await focusWakeLock?.release()}catch{}focusWakeLock=null;
  if(!focusFrames.length)return null;
- // Repaint saved frames at 60fps and encode a real 60fps timelapse. The encoding itself takes playback time.
- const canvas=document.createElement('canvas');canvas.width=640;canvas.height=360;
+ // Hold each captured image for 10 output frames at 60 FPS (~18x speed).
+ const canvas=document.createElement('canvas');canvas.width=focusFrameWidth;canvas.height=focusFrameHeight;
  if(!canvas.captureStream||!window.MediaRecorder)throw Error('This Safari version cannot encode a timelapse from a canvas.');
  const stream=canvas.captureStream(60),options=['video/mp4;codecs=avc1.42E01E','video/mp4','video/webm;codecs=vp9','video/webm'].find(x=>MediaRecorder.isTypeSupported(x));
  if(!options)throw Error('No supported browser video encoder.');
  const recorder=new MediaRecorder(stream,{mimeType:options,videoBitsPerSecond:900000});const chunks=[];recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
  const result=new Promise((resolve,reject)=>{recorder.onerror=()=>reject(Error('Video encoding failed'));recorder.onstop=()=>resolve(new Blob(chunks,{type:options}))});
  const ctx=canvas.getContext('2d');recorder.start();
- for(const src of focusFrames){const img=new Image();img.src=src;await img.decode();ctx.drawImage(img,0,0,640,360);await new Promise(r=>setTimeout(r,1000/60));}
+ for(const src of focusFrames){const img=new Image();img.src=src;await img.decode();ctx.drawImage(img,0,0,canvas.width,canvas.height);await new Promise(r=>setTimeout(r,1000*focusTimelapseFrameHold/60));}
  await new Promise(r=>setTimeout(r,120));recorder.stop();const blob=await result;stream.getTracks().forEach(t=>t.stop());focusFrames=[];return blob;
 }
 async function focusFinish(){if(focusUploading)return;const ms=elapsedMs();if(ms<1000)return;focusSubject=$('focusSubject')?.value?.trim()||focusSubject;focusUploading=true;let blob=null;
